@@ -40,7 +40,7 @@ class TranslationsFa extends Translations with BaseTranslations<AppLocale, Trans
 
   // Translations
   @override
-  String get appName => 'لوکال‌سند';
+  String get appName => 'OmniDrop';
   @override
   late final _Translations$general$fa general = _Translations$general$fa._(_root);
   @override
@@ -291,7 +291,7 @@ class _Translations$networkInterfacesPage$fa extends Translations$networkInterfa
   String get title => 'رابط‌های شبکه';
   @override
   String get info =>
-      'به طور پیش‌فرض، لوکال‌سند از تمام رابط‌های شبکه موجود استفاده می‌کند. در اینجا می‌توانید شبکه‌های ناخواسته را استثنا کنید. برای اعمال تغییرات باید سرور را راه‌اندازی مجدد کنید.';
+      'به طور پیش‌فرض، OmniDrop از تمام رابط‌های شبکه موجود استفاده می‌کند. در اینجا می‌توانید شبکه‌های ناخواسته را استثنا کنید. برای اعمال تغییرات باید سرور را راه‌اندازی مجدد کنید.';
   @override
   String get preview => 'پیش‌نمایش';
   @override
@@ -416,7 +416,7 @@ class _Translations$receiveOptionsPage$fa extends Translations$receiveOptionsPag
   @override
   String get destination => 'مسیر دریافت';
   @override
-  String get appDirectory => '(پوشه لوکال‌سند)';
+  String get appDirectory => '(پوشه OmniDrop)';
   @override
   String get saveToGallery => 'ذخیره در گالری';
   @override
@@ -495,7 +495,7 @@ class _Translations$webSharePage$fa extends Translations$webSharePage$en {
   @override
   String pinHint({required Object pin}) => 'رمز ورود: "${pin}"';
   @override
-  String get encryptionHint => 'لوکال‌سند از یک گواهی خودامضا (Self-signed) استفاده می‌کند. باید آن را در مرورگر تأیید کنید.';
+  String get encryptionHint => 'OmniDrop از یک گواهی خودامضا (Self-signed) استفاده می‌کند. باید آن را در مرورگر تأیید کنید.';
   @override
   String pendingRequests({required Object n}) => 'درخواست‌های در انتظار: ${n}';
 }
@@ -519,10 +519,10 @@ class _Translations$aboutPage$fa extends Translations$aboutPage$en {
 
   // Translations
   @override
-  String get title => 'درباره لوکال‌سند';
+  String get title => 'درباره OmniDrop';
   @override
   List<String> get description => [
-    'لوکال‌سند یک برنامه رایگان و متن‌باز است که به شما امکان می‌دهد فایل‌ها و پیام‌ها را به‌طور امن با دستگاه‌های اطراف از طریق شبکه محلی و بدون نیاز به اینترنت به اشتراک بگذارید.',
+    'OmniDrop یک برنامه رایگان و متن‌باز است که به شما امکان می‌دهد فایل‌ها و پیام‌ها را به‌طور امن با دستگاه‌های اطراف از طریق شبکه محلی و بدون نیاز به اینترنت به اشتراک بگذارید.',
     'این برنامه برای سیستم‌عامل‌های اندروید، آی او اس، مک او اس، ویندوز و لینوکس در دسترس است. می‌توانید با مراجعه به وب‌سایت رسمی برنامه، تمامی روش‌های دانلود را مشاهده کنید.',
   ];
   @override
@@ -546,7 +546,7 @@ class _Translations$donationPage$fa extends Translations$donationPage$en {
   String get title => 'کمک مالی';
   @override
   String get info =>
-      'لوکال‌سند رایگان، متن‌باز و فاقد هرگونه تبلیغات است. اگر به این برنامه علاقه‌مندید، می‌توانید با کمک مالی از توسعه آن حمایت کنید.';
+      'OmniDrop رایگان، متن‌باز و فاقد هرگونه تبلیغات است. اگر به این برنامه علاقه‌مندید، می‌توانید با کمک مالی از توسعه آن حمایت کنید.';
   @override
   String donate({required Object amount}) => 'کمک مالی به میزان ${amount}';
   @override
@@ -745,7 +745,7 @@ class _Translations$tray$fa extends Translations$tray$en {
   @override
   String get open => _root.general.open;
   @override
-  String get close => 'خروج از لوکال‌سند';
+  String get close => 'خروج از OmniDrop';
   @override
   String get closeWindows => 'خروج';
 }
@@ -956,7 +956,7 @@ class _Translations$settingsTab$general$fa extends Translations$settingsTab$gene
   @override
   String get launchMinimized => 'اجرای خودکار: اجرا به‌صورت پنجره پنهان';
   @override
-  String get showInContextMenu => 'نمایش لوکال‌سند در منوی راست‌کلیک';
+  String get showInContextMenu => 'نمایش OmniDrop در منوی راست‌کلیک';
   @override
   String get animations => 'پویانمایی‌ها';
 }
@@ -1058,7 +1058,7 @@ class _Translations$settingsTab$other$fa extends Translations$settingsTab$other$
   @override
   String get title => 'سایر';
   @override
-  String get support => 'حمایت از لوکال‌سند';
+  String get support => 'حمایت از OmniDrop';
   @override
   String get donate => 'کمک مالی';
   @override
@@ -1414,7 +1414,7 @@ class _Translations$dialogs$localNetworkUnauthorized$fa extends Translations$dia
   String get title => 'عدم دسترسی به شبکه';
   @override
   String get description =>
-      'لوکال‌سند بدون داشتن مجوز اسکن شبکه محلی نمی‌تواند دستگاه‌های دیگر را پیدا کند. لطفاً این دسترسی را در تنظیمات به برنامه اعطا کنید.';
+      'OmniDrop بدون داشتن مجوز اسکن شبکه محلی نمی‌تواند دستگاه‌های دیگر را پیدا کند. لطفاً این دسترسی را در تنظیمات به برنامه اعطا کنید.';
   @override
   String get gotoSettings => 'تنظیمات';
 }
@@ -1557,7 +1557,7 @@ class _Translations$dialogs$sendModeHelp$fa extends Translations$dialogs$sendMod
   @override
   String get multiple => 'فایل‌ها را برای چندین گیرنده ارسال می‌کند. لیست فایل‌های انتخاب‌شده پس از اتمام انتقال پاک نخواهد شد.';
   @override
-  String get link => 'گیرندگانی که لوکال‌سند را نصب نکرده‌اند، می‌توانند فایل‌ها را با باز کردن لینک در مرورگر خود دانلود کنند.';
+  String get link => 'گیرندگانی که OmniDrop را نصب نکرده‌اند، می‌توانند فایل‌ها را با باز کردن لینک در مرورگر خود دانلود کنند.';
 }
 
 // Path: dialogs.zoom

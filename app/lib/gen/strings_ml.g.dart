@@ -40,7 +40,7 @@ class TranslationsMl extends Translations with BaseTranslations<AppLocale, Trans
 
   // Translations
   @override
-  String get appName => 'ലോക്കൽസെൻഡ്‌';
+  String get appName => 'OmniDrop';
   @override
   late final _Translations$general$ml general = _Translations$general$ml._(_root);
   @override
@@ -289,7 +289,7 @@ class _Translations$networkInterfacesPage$ml extends Translations$networkInterfa
   String get title => 'നെറ്റ്‌വർക്ക് ഇന്റർഫേസുകൾ';
   @override
   String get info =>
-      'ഡിഫോൾട്ടായി, ലോക്കൽസെൻഡ് ലഭ്യമായ എല്ലാ നെറ്റ്‌വർക്ക് ഇന്റർഫേസുകളും ഉപയോഗിക്കുന്നു. നിങ്ങൾക്ക് ഇവിടെ ആവശ്യമില്ലാത്ത നെറ്റ്‌വർക്കുകൾ ഒഴിവാക്കാം. മാറ്റങ്ങൾ പ്രയോഗിക്കാൻ നിങ്ങൾ സെർവർ പുനരാരംഭിക്കേണ്ടതുണ്ട്.';
+      'ഡിഫോൾട്ടായി, OmniDrop ലഭ്യമായ എല്ലാ നെറ്റ്‌വർക്ക് ഇന്റർഫേസുകളും ഉപയോഗിക്കുന്നു. നിങ്ങൾക്ക് ഇവിടെ ആവശ്യമില്ലാത്ത നെറ്റ്‌വർക്കുകൾ ഒഴിവാക്കാം. മാറ്റങ്ങൾ പ്രയോഗിക്കാൻ നിങ്ങൾ സെർവർ പുനരാരംഭിക്കേണ്ടതുണ്ട്.';
   @override
   String get preview => 'സ്വകാര്യപ്രദർശനം';
   @override
@@ -414,7 +414,7 @@ class _Translations$receiveOptionsPage$ml extends Translations$receiveOptionsPag
   @override
   String get destination => _root.settingsTab.receive.destination;
   @override
-  String get appDirectory => '(ലോക്കൽസെൻഡ് ഫോൾഡർ)';
+  String get appDirectory => '(OmniDrop ഫോൾഡർ)';
   @override
   String get saveToGallery => _root.settingsTab.receive.saveToGallery;
   @override
@@ -493,7 +493,7 @@ class _Translations$webSharePage$ml extends Translations$webSharePage$en {
   @override
   String pinHint({required Object pin}) => 'പിൻ ഇതാണ് "${pin}"';
   @override
-  String get encryptionHint => 'ലോക്കൽസെൻഡ്‌ ഉപയോഗിക്കുന്നത് സ്വയം ഒപ്പു വച്ച സാക്ഷ്യപത്രം ആണ്. നിങ്ങളുടെ ബ്രൗസറിൽ ഇത് നിങ്ങൾ അംഗീകരിക്കണം.';
+  String get encryptionHint => 'OmniDrop ഉപയോഗിക്കുന്നത് സ്വയം ഒപ്പു വച്ച സാക്ഷ്യപത്രം ആണ്. നിങ്ങളുടെ ബ്രൗസറിൽ ഇത് നിങ്ങൾ അംഗീകരിക്കണം.';
   @override
   String pendingRequests({required Object n}) => 'തീരുമാനിക്കപ്പെടാത്ത അപേക്ഷകൾ: ${n}';
 }
@@ -520,7 +520,7 @@ class _Translations$aboutPage$ml extends Translations$aboutPage$en {
   String get title => 'ലോക്കൽസെൻഡിനെ കുറിച്ച്';
   @override
   List<String> get description => [
-    'ഇന്റർനെറ്റ് കണക്ഷന്റെ ആവശ്യമില്ലാതെ ലോക്കൽ നെറ്റ്വർക്കിലൂടെ അടുത്തുള്ള ഡിവൈസുകളിലേക്ക് സുരക്ഷിതമായി ഫയലുകളും മെസ്സേജുകളും അയക്കാൻ അനുവദിക്കുന്ന ഒരു സൗജന്യ ഓപ്പൺ സോഴ്സ് ആപ്പ് ആണ് ലോക്കൽസെൻഡ്‌.',
+    'ഇന്റർനെറ്റ് കണക്ഷന്റെ ആവശ്യമില്ലാതെ ലോക്കൽ നെറ്റ്വർക്കിലൂടെ അടുത്തുള്ള ഡിവൈസുകളിലേക്ക് സുരക്ഷിതമായി ഫയലുകളും മെസ്സേജുകളും അയക്കാൻ അനുവദിക്കുന്ന ഒരു സൗജന്യ ഓപ്പൺ സോഴ്സ് ആപ്പ് ആണ് OmniDrop.',
     'ഈ ആപ്പ് ആൻഡ്രോയിഡ്, ഐഒഎസ്, മാക് ഒഎസ്, വിൻഡോസ് , ലിനക്സ് എന്നീ പ്ലാറ്റുഫോമുകളിൽ ലഭ്യമാണ് . എല്ലാവിധ ഡൌൺലോഡ് ഓപ്ഷൻസും ഔദ്യോഗിക ഹോം പേജിൽ കാണാവുന്നതാണ്.',
   ];
   @override
@@ -544,7 +544,7 @@ class _Translations$donationPage$ml extends Translations$donationPage$en {
   String get title => 'സംഭാവന ചെയ്യുക';
   @override
   String get info =>
-      'ലോക്കൽസെൻഡ്‌ സൗജന്യവും ഓപ്പൺ-സോഴ്സും പരസ്യങ്ങൾ ഇല്ലാത്തതും ആണ്. നിങ്ങൾക്കു ആപ്പ് ഇഷ്ടമായെങ്കിൽ ചെറിയ സംഭാവന നൽകി വികസനത്തിന് സഹായിക്കാവുന്നതാണ്.';
+      'OmniDrop സൗജന്യവും ഓപ്പൺ-സോഴ്സും പരസ്യങ്ങൾ ഇല്ലാത്തതും ആണ്. നിങ്ങൾക്കു ആപ്പ് ഇഷ്ടമായെങ്കിൽ ചെറിയ സംഭാവന നൽകി വികസനത്തിന് സഹായിക്കാവുന്നതാണ്.';
   @override
   String donate({required Object amount}) => 'സംഭാവന ${amount}';
   @override
@@ -1473,7 +1473,7 @@ class _Translations$dialogs$sendModeHelp$ml extends Translations$dialogs$sendMod
   @override
   String get multiple => 'ഫയൽസ് കുറേപേർക്കു അയക്കുക, അയച്ചു കഴിഞ്ഞ ശേഷം സെക്ഷൻ ക്ലീൻ ചെയ്യപ്പെടില്ല .';
   @override
-  String get link => 'ലോക്കൽസെൻഡ്‌ ഇൻസ്റ്റാൾ ചെയ്തവർക് ഈ ലിങ്ക് ബ്രൗസറിൽ ഓപ്പൺ ചെയ്ത ഫയൽ ഡൌൺലോഡ് ചെയ്യാം.';
+  String get link => 'OmniDrop ഇൻസ്റ്റാൾ ചെയ്തവർക് ഈ ലിങ്ക് ബ്രൗസറിൽ ഓപ്പൺ ചെയ്ത ഫയൽ ഡൌൺലോഡ് ചെയ്യാം.';
 }
 
 // Path: dialogs.zoom

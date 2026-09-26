@@ -40,8 +40,8 @@ class DiscoveryDebugPage extends StatelessWidget {
             (log) => CopyableText(
               prefix: TextSpan(
                 text: '[${_dateFormat.format(log.timestamp)}] ',
-                style: const TextStyle(
-                  color: Colors.green,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.tertiary,
                   fontWeight: FontWeight.bold,
                 ),
               ),

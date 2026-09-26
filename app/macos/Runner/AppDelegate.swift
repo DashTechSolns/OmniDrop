@@ -34,8 +34,8 @@ class AppDelegate: FlutterAppDelegate {
         
         NSApplication.shared.servicesProvider = self
         
-        let localsendBrandColor = NSColor(red: 0, green: 0.392, blue: 0.353, alpha: 0.8) // #00645a
-        DockProgress.style = .squircle(color: localsendBrandColor)
+        let omniDropBrandColor = NSColor(red: 0.024, green: 0.714, blue: 0.831, alpha: 0.8) // #06B6D4
+        DockProgress.style = .squircle(color: omniDropBrandColor)
         
         isLaunchedAsLoginItem = LaunchAtLogin.wasLaunchedAtLogin
         

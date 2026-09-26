@@ -39,7 +39,7 @@ class LanguagePage extends StatelessWidget {
                   ),
                   if (locale == activeLocale) ...[
                     const SizedBox(width: 10),
-                    const Icon(Icons.check_circle, color: Colors.green),
+                    Icon(Icons.check_circle, color: Theme.of(context).colorScheme.tertiary),
                   ],
                 ],
               ),

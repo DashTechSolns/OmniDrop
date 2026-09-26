@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:localsend_app/config/theme.dart';
 import 'package:localsend_app/gen/strings.g.dart';
 import 'package:localsend_app/model/persistence/color_mode.dart';
 import 'package:localsend_app/model/persistence/favorite_device.dart';
@@ -312,7 +313,7 @@ class PersistenceService {
     final value = _prefs.getString(_customColorKey);
     final rgb = value == null ? null : int.tryParse(value, radix: 16);
     if (rgb == null) {
-      return Colors.teal;
+      return omniDropPrimaryColor;
     }
     return Color(0xff000000 | rgb);
   }

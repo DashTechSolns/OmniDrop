@@ -40,9 +40,9 @@ class AboutPage extends StatelessWidget {
           Center(
             child: TextButton(
               onPressed: () async {
-                await launchUrl(Uri.parse('https://localsend.org'));
+                await launchUrl(Uri.parse('https://github.com/DashTechSolutions/OmniDrop'));
               },
-              child: const Text('localsend.org'),
+              child: const Text('github.com/DashTechSolutions/OmniDrop'),
             ),
           ),
           const SizedBox(height: 10),
@@ -137,13 +137,13 @@ class AboutPage extends StatelessWidget {
             children: [
               TextButton(
                 onPressed: () async {
-                  await launchUrl(Uri.parse('https://localsend.org'));
+                  await launchUrl(Uri.parse('https://github.com/DashTechSolutions/OmniDrop'));
                 },
                 child: const Text('Homepage'),
               ),
               TextButton(
                 onPressed: () async {
-                  await launchUrl(Uri.parse('https://github.com/localsend/localsend'), mode: LaunchMode.externalApplication);
+                  await launchUrl(Uri.parse('https://github.com/DashTechSolutions/OmniDrop'), mode: LaunchMode.externalApplication);
                 },
                 child: const Text('Source Code (Github)'),
               ),

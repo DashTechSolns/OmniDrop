@@ -9,6 +9,10 @@ import 'package:refena_flutter/refena_flutter.dart';
 import 'package:yaru/yaru.dart' as yaru;
 
 final _borderRadius = BorderRadius.circular(5);
+const omniDropPrimaryColor = Color(0xFF06B6D4);
+const _brandSecondary = Color(0xFF8B5CF6);
+const _brandAccent = Color(0xFF10B981);
+const _darkBackground = Color(0xFF090D16);
 
 ThemeData getTheme(ColorMode colorMode, Color customColor, Brightness brightness, DynamicColors? dynamicColors) {
   if (colorMode == ColorMode.yaru) {
@@ -142,15 +146,23 @@ extension InputDecorationThemeExt on InputDecorationThemeData {
 
 ColorScheme _determineColorScheme(ColorMode mode, Color customColor, Brightness brightness, DynamicColors? dynamicColors) {
   final defaultColorScheme = ColorScheme.fromSeed(
-    seedColor: Colors.teal,
+    seedColor: omniDropPrimaryColor,
     brightness: brightness,
+  ).copyWith(
+    primary: omniDropPrimaryColor,
+    onPrimary: Colors.black,
+    secondary: _brandSecondary,
+    onSecondary: Colors.white,
+    tertiary: _brandAccent,
+    onTertiary: Colors.black,
+    surface: brightness == Brightness.dark ? _darkBackground : null,
   );
 
   final colorScheme = switch (mode) {
     ColorMode.system => brightness == Brightness.light ? dynamicColors?.light : dynamicColors?.dark,
     ColorMode.localsend => null,
     ColorMode.oled => (dynamicColors?.dark ?? defaultColorScheme).copyWith(
-      surface: Colors.black,
+      surface: _darkBackground,
     ),
     ColorMode.yaru => throw 'Should reach here',
     ColorMode.custom => ColorScheme.fromSeed(

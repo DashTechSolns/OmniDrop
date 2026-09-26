@@ -1,11 +1,11 @@
 {
-  "name": "localsend_app",
-  "short_name": "localsend_app",
+  "name": "OmniDrop",
+  "short_name": "OmniDrop",
   "start_url": ".",
   "display": "standalone",
-  "background_color": "#0175C2",
-  "theme_color": "#0175C2",
-  "description": "A new Flutter project.",
+  "background_color": "#090D16",
+  "theme_color": "#06B6D4",
+  "description": "OmniDrop is an open source cross-platform file sharing app.",
   "orientation": "portrait-primary",
   "prefer_related_applications": false,
   "icons": [
