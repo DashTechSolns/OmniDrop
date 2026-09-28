@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:localsend_app/config/theme.dart';
 import 'package:localsend_app/gen/strings.g.dart';
-import 'package:localsend_app/model/persistence/color_mode.dart';
 import 'package:localsend_app/pages/about/about_page.dart';
 import 'package:localsend_app/pages/changelog_page.dart';
 import 'package:localsend_app/pages/donation/donation_page.dart';
@@ -55,39 +54,6 @@ class SettingsTab extends StatelessWidget {
             _SettingsSection(
               title: t.settingsTab.general.title,
               children: [
-                _SettingsEntry(
-                  label: t.settingsTab.general.brightness,
-                  child: CustomDropdownButton<ThemeMode>(
-                    value: vm.settings.theme,
-                    items: vm.themeModes.map((theme) {
-                      return DropdownMenuItem(
-                        value: theme,
-                        alignment: Alignment.center,
-                        child: Text(theme.humanName),
-                      );
-                    }).toList(),
-                    onChanged: (theme) => vm.onChangeTheme(context, theme),
-                  ),
-                ),
-                _SettingsEntry(
-                  label: t.settingsTab.general.color,
-                  child: CustomDropdownButton<ColorMode>(
-                    value: vm.settings.colorMode,
-                    items: vm.colorModes.map((colorMode) {
-                      return DropdownMenuItem(
-                        value: colorMode,
-                        alignment: Alignment.center,
-                        child: Text(colorMode.humanName, overflow: TextOverflow.ellipsis),
-                      );
-                    }).toList(),
-                    onChanged: (colorMode) => vm.onChangeColorMode(context, colorMode),
-                  ),
-                ),
-                _ButtonEntry(
-                  label: t.settingsTab.general.language,
-                  buttonLabel: vm.settings.locale?.getLocaleName() ?? t.settingsTab.general.languageOptions.system,
-                  onTap: () => vm.onTapLanguage(context),
-                ),
                 if (checkPlatformIsDesktop()) ...[
                   /// Wayland does window position handling, so there's no need for it. See [https://github.com/localsend/localsend/issues/544]
                   if (vm.advanced && checkPlatformIsNotWaylandDesktop())
@@ -138,13 +104,6 @@ class SettingsTab extends StatelessWidget {
                     ),
                   ],
                 ],
-                _BooleanEntry(
-                  label: t.settingsTab.general.animations,
-                  value: vm.settings.enableAnimations,
-                  onChanged: (b) async {
-                    await ref.notifier(settingsProvider).setEnableAnimations(b);
-                  },
-                ),
               ],
             ),
             _SettingsSection(
@@ -608,7 +567,6 @@ class SettingsTab extends StatelessWidget {
     );
   }
 }
-
 class _SettingsEntry extends StatelessWidget {
   final String label;
   final Widget child;
@@ -634,7 +592,6 @@ class _SettingsEntry extends StatelessWidget {
     );
   }
 }
-
 /// A specialized version of [_SettingsEntry].
 class _BooleanEntry extends StatelessWidget {
   final String label;
@@ -745,30 +702,5 @@ class _SettingsSection extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-extension on ThemeMode {
-  String get humanName {
-    switch (this) {
-      case ThemeMode.system:
-        return t.settingsTab.general.brightnessOptions.system;
-      case ThemeMode.light:
-        return t.settingsTab.general.brightnessOptions.light;
-      case ThemeMode.dark:
-        return t.settingsTab.general.brightnessOptions.dark;
-    }
-  }
-}
-
-extension on ColorMode {
-  String get humanName {
-    return switch (this) {
-      ColorMode.system => t.settingsTab.general.colorOptions.system,
-      ColorMode.localsend => t.appName,
-      ColorMode.oled => t.settingsTab.general.colorOptions.oled,
-      ColorMode.yaru => 'Yaru',
-      ColorMode.custom => t.settingsTab.general.colorOptions.custom,
-    };
   }
 }

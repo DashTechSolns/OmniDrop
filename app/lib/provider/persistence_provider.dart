@@ -55,6 +55,8 @@ const _stunServers = 'ls_stun_servers';
 
 // Received file history
 const _receiveHistory = 'ls_receive_history';
+const _profileAvatar = 'od_profile_avatar';
+const _enable5GPreference = 'od_enable_5g_preference';
 
 // Favorites
 const _favorites = 'ls_favorites';
@@ -261,6 +263,18 @@ class PersistenceService {
   Future<void> setReceiveHistory(List<ReceiveHistoryEntry> entries) async {
     final historyRaw = entries.map((entry) => jsonEncode(entry.toJson())).toList();
     await _prefs.setStringList(_receiveHistory, historyRaw);
+  }
+
+  int getProfileAvatar() => _prefs.getInt(_profileAvatar) ?? 0;
+
+  Future<void> setProfileAvatar(int index) async {
+    await _prefs.setInt(_profileAvatar, index);
+  }
+
+  bool isEnable5GPreference() => _prefs.getBool(_enable5GPreference) ?? false;
+
+  Future<void> setEnable5GPreference(bool enabled) async {
+    await _prefs.setBool(_enable5GPreference, enabled);
   }
 
   List<FavoriteDevice> getFavorites() {

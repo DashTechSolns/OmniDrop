@@ -3,13 +3,26 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LocalSend</title>
+    <title>OmniDrop</title>
     <style>
+      :root {
+        color-scheme: dark;
+        --background: #090D16;
+        --primary: #06B6D4;
+        --secondary: #8B5CF6;
+        --accent: #10B981;
+            --text: var(--accent);
+            --muted: var(--secondary);
+            --surface: var(--background);
+      }
+
         body {
             font-family: sans-serif, system-ui;
             margin: 0;
             line-height: 1.5;
             text-align: center;
+        color: var(--text);
+        background: var(--background);
         }
 
         #content {
@@ -23,24 +36,51 @@
         }
 
         #content.drag-over {
-            border-color: #00796B;
-            background-color: #E0F2F1;
+            border-color: var(--primary);
+            background-color: var(--surface);
         }
 
-        #upload-button {
+          button {
             width: 100%;
-            padding: 1em;
+            padding: 0.85em 1em;
             font-family: inherit;
-            font-size: 1.5em;
-            color: #FFFFFF;
-            background-color: #00796B;
+            font-size: 1em;
+            font-weight: 600;
+            color: var(--background);
+            background-color: var(--primary);
             border: none;
-            border-radius: 0.5em;
+            border-radius: 5px;
             cursor: pointer;
         }
 
-        #upload-button:hover {
-            background-color: #009688;
+          button:hover {
+            background-color: var(--accent);
+          }
+
+          button:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+          }
+
+          #staged-files {
+            margin: 1em 0;
+            padding: 0;
+            list-style: none;
+            text-align: left;
+          }
+
+          #staged-files li {
+            display: flex;
+            justify-content: space-between;
+            gap: 1em;
+            padding: 0.6em 0;
+            border-bottom: 1px solid var(--secondary);
+            overflow-wrap: anywhere;
+          }
+
+          .file-size {
+            color: var(--muted);
+            white-space: nowrap;
         }
 
         #status-text {
@@ -49,7 +89,7 @@
         }
 
         #status-text.error {
-            color: #C62828;
+            color: var(--secondary);
         }
 
         #progress-text {
@@ -59,20 +99,22 @@
 
         #drop-hint {
             margin-top: 0.75em;
-            color: #616161;
+          color: var(--muted);
         }
     </style>
 </head>
 <body>
 <noscript>
-    LocalSend requires JavaScript, which is currently disabled. Please enable it and try again.
+    OmniDrop requires JavaScript, which is currently disabled. Please enable it and try again.
 </noscript>
 
-<h1 style="padding: 0.5em">LocalSend</h1>
+  <h1 style="padding: 0.5em">OmniDrop</h1>
 <div id="content">
-    <button id="upload-button" type="button">Upload</button>
+    <button id="upload-button" type="button">Choose files</button>
     <p id="drop-hint">Place items to share.</p>
     <input id="file-input" type="file" multiple style="display: none">
+    <ul id="staged-files"></ul>
+    <button id="send-button" type="button" disabled>Send staged files</button>
     <p id="status-text"></p>
     <p id="progress-text"></p>
 </div>
@@ -84,6 +126,7 @@
     var queryParams = location.search.slice(1).split('&');
     var pin = null;
     var uploading = false;
+    var stagedFiles = [];
     // dragenter/dragleave fire for every nested element, so the drop zone is only left when this reaches zero.
     var dragDepth = 0;
 
@@ -121,6 +164,7 @@
 
     function setButtonVisible(visible) {
       document.getElementById('upload-button').style.display = visible ? 'block' : 'none';
+      document.getElementById('send-button').style.display = visible ? 'block' : 'none';
       document.getElementById('drop-hint').style.display = visible ? 'block' : 'none';
     }
 
@@ -191,8 +235,34 @@
     // Ends the upload flow after all files have been sent.
     function finishWithSuccess() {
       uploading = false;
+      stagedFiles = [];
+      renderStagedFiles();
       showStatus('');
       setButtonVisible(true);
+    }
+
+    function stageFiles(fileList) {
+      for (var i = 0; i < fileList.length; i++) {
+        stagedFiles.push(fileList[i]);
+      }
+      renderStagedFiles();
+    }
+
+    function renderStagedFiles() {
+      var list = document.getElementById('staged-files');
+      list.innerHTML = '';
+      for (var i = 0; i < stagedFiles.length; i++) {
+        var row = document.createElement('li');
+        var name = document.createElement('span');
+        var size = document.createElement('span');
+        name.textContent = stagedFiles[i].name;
+        size.className = 'file-size';
+        size.textContent = formatBytes(stagedFiles[i].size);
+        row.appendChild(name);
+        row.appendChild(size);
+        list.appendChild(row);
+      }
+      document.getElementById('send-button').disabled = stagedFiles.length === 0;
     }
 
     function startUpload(fileList) {
@@ -343,9 +413,14 @@
       document.getElementById('upload-button').onclick = function () {
         fileInput.click();
       };
+      document.getElementById('send-button').onclick = function () {
+        if (stagedFiles.length > 0) {
+          startUpload(stagedFiles.slice(0));
+        }
+      };
       fileInput.onchange = function () {
         if (fileInput.files.length > 0) {
-          startUpload(fileInput.files);
+          stageFiles(fileInput.files);
           // Reset the input so selecting the same files again fires this event.
           fileInput.value = '';
         }
@@ -393,7 +468,7 @@
         }
         var files = getDroppedFiles(e.dataTransfer);
         if (files.length > 0) {
-          startUpload(files);
+          stageFiles(files);
         }
       });
 

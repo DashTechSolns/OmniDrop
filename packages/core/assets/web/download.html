@@ -3,19 +3,60 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LocalSend</title>
+    <title>OmniDrop</title>
     <style>
+      :root {
+        color-scheme: dark;
+        --background: #090D16;
+        --primary: #06B6D4;
+        --secondary: #8B5CF6;
+        --accent: #10B981;
+        --text: var(--accent);
+        --muted: var(--secondary);
+        --surface: var(--background);
+      }
+
         body {
             font-family: sans-serif, system-ui;
             margin: 0;
             line-height: 1.5;
             text-align: center;
+        color: var(--text);
+        background: var(--background);
         }
 
         a {
             text-decoration: none;
-            color: #FFFFFF;
+        color: var(--text);
         }
+
+      button {
+        padding: 0.8em 1em;
+        font: inherit;
+        font-weight: 600;
+        color: var(--background);
+        background: var(--primary);
+        border: 0;
+        border-radius: 5px;
+        cursor: pointer;
+      }
+
+      button:hover { background: var(--accent); }
+
+      #upload-panel {
+        box-sizing: border-box;
+        width: min(100% - 2em, 1000px);
+        margin: 2em auto;
+        padding: 1em;
+        text-align: left;
+        background: var(--surface);
+        border: 1px solid var(--secondary);
+        border-radius: 5px;
+      }
+
+      #upload-files { display: block; margin: 1em 0; }
+
+      #staged-files { padding-left: 1.2em; color: var(--muted); }
 
         #file-list {
             box-sizing: border-box;
@@ -30,15 +71,15 @@
             display: table;
             width: 100%;
             padding: 0.5em 1em;
-            background-color: #00796B;
-            border-radius: 0.5em;
+            background-color: var(--secondary);
+            border-radius: 5px;
             margin-bottom: 1em;
             float: left;
             box-sizing: border-box;
         }
 
         .file-item:hover {
-            background-color: #009688;
+            background-color: var(--primary);
         }
 
         .file-name-cell, .file-size-cell, .file-index-cell {
@@ -54,7 +95,7 @@
         .file-size-cell, .file-index-cell {
             font-size: 0.8em;
             white-space: nowrap;
-            color: #E0E0E0;
+            color: var(--text);
         }
 
         /* Two columns layout */
@@ -86,13 +127,21 @@
 </head>
 <body>
 <noscript>
-    LocalSend requires JavaScript, which is currently disabled. Please enable it and try again.
+    OmniDrop requires JavaScript, which is currently disabled. Please enable it and try again.
 </noscript>
 
-<h1 style="padding: 0.5em">LocalSend</h1>
+  <h1 style="padding: 0.5em">OmniDrop</h1>
+  <p>Download shared files or send files to this device.</p>
 <p id="status-text"></p>
 <div id="file-list"></div>
 <div id="single-file"></div>
+  <section id="upload-panel">
+    <h2>Send files to this device</h2>
+    <input id="upload-files" type="file" multiple>
+    <ul id="staged-files"></ul>
+    <button id="send-upload" type="button" disabled>Send staged files</button>
+    <p id="upload-status" role="status"></p>
+  </section>
 
 <script>
     // IMPORTANT: This script works in Internet Explorer 8!
@@ -103,6 +152,7 @@
     var sessionId = sessionStorage.getItem('sessionId');
     var queryParams = location.search.slice(1).split('&');
     var queryPin = null;
+    var stagedFiles = [];
 
     // Parse query parameters manually for IE
     for (var i = 0; i < queryParams.length; i++) {
@@ -204,7 +254,116 @@
     }
 
     function init() {
+      var uploadInput = document.getElementById('upload-files');
+      uploadInput.onchange = function () {
+        stagedFiles = Array.prototype.slice.call(uploadInput.files);
+        renderStagedFiles();
+      };
+      document.getElementById('send-upload').onclick = uploadStagedFiles;
       fetchI18n(firstRequestFiles);
+    }
+
+    function renderStagedFiles() {
+      var list = document.getElementById('staged-files');
+      list.innerHTML = '';
+      for (var i = 0; i < stagedFiles.length; i++) {
+        var row = document.createElement('li');
+        row.textContent = stagedFiles[i].name + ' (' + formatBytes(stagedFiles[i].size) + ')';
+        list.appendChild(row);
+      }
+      document.getElementById('send-upload').disabled = stagedFiles.length === 0;
+    }
+
+    function uploadStagedFiles() {
+      if (!stagedFiles.length) return;
+      var selected = {};
+      var files = {};
+      for (var i = 0; i < stagedFiles.length; i++) {
+        var id = String(i);
+        selected[id] = stagedFiles[i];
+        files[id] = {
+          id: id,
+          fileName: stagedFiles[i].name,
+          size: stagedFiles[i].size,
+          fileType: stagedFiles[i].type || 'application/octet-stream'
+        };
+      }
+      var body = JSON.stringify({
+        info: {
+          alias: 'Web Browser',
+          version: '2.1',
+          deviceType: 'web',
+          fingerprint: getFingerprint(),
+          port: 0,
+          protocol: location.protocol === 'https:' ? 'https' : 'http',
+          download: false
+        },
+        files: files
+      });
+      var url = '/api/localsend/v2/prepare-upload';
+      if (queryPin) url += '?pin=' + encodeURIComponent(queryPin);
+      document.getElementById('upload-status').textContent = i18n.waiting;
+      makeUploadRequest(url, 'POST', body, function (response) {
+        if (response.status === 401) {
+          var pin = prompt(i18n.enterPin);
+          if (!pin) return setUploadStatus(i18n.invalidPin);
+          makeUploadRequest('/api/localsend/v2/prepare-upload?pin=' + encodeURIComponent(pin), 'POST', body, function (retry) {
+            handleUploadResponse(retry, selected);
+          });
+          return;
+        }
+        handleUploadResponse(response, selected);
+      });
+    }
+
+    function handleUploadResponse(response, selected) {
+      if (response.status !== 200) return setUploadStatus(errorText(response.status));
+      var data = JSON.parse(response.responseText);
+      var fileIds = getKeys(data.files);
+      uploadNextFile(data.sessionId, data.files, selected, fileIds, 0);
+    }
+
+    function uploadNextFile(sessionId, tokens, selected, fileIds, index) {
+      if (index >= fileIds.length) {
+        stagedFiles = [];
+        renderStagedFiles();
+        document.getElementById('upload-files').value = '';
+        return setUploadStatus('Files sent.');
+      }
+      var fileId = fileIds[index];
+      var url = '/api/localsend/v2/upload?sessionId=' + encodeURIComponent(sessionId) +
+          '&fileId=' + encodeURIComponent(fileId) + '&token=' + encodeURIComponent(tokens[fileId]);
+      makeUploadRequest(url, 'POST', selected[fileId], function (response) {
+        if (response.status !== 200) return setUploadStatus(errorText(response.status));
+        uploadNextFile(sessionId, tokens, selected, fileIds, index + 1);
+      });
+    }
+
+    function makeUploadRequest(url, method, body, callback) {
+      var xhr = new XMLHttpRequest();
+      xhr.open(method, url, true);
+      xhr.onreadystatechange = function () {
+        if (xhr.readyState === 4) callback(xhr);
+      };
+      xhr.send(body);
+    }
+
+    function setUploadStatus(message) {
+      document.getElementById('upload-status').textContent = message;
+    }
+
+    function getFingerprint() {
+      var fingerprint = sessionStorage.getItem('fingerprint');
+      if (!fingerprint) {
+        fingerprint = 'web-';
+        for (var i = 0; i < 32; i++) fingerprint += Math.floor(Math.random() * 16).toString(16);
+        sessionStorage.setItem('fingerprint', fingerprint);
+      }
+      return fingerprint;
+    }
+
+    function errorText(status) {
+      return status ? 'Error: ' + status : 'Error';
     }
 
     function handleSuccess(response) {

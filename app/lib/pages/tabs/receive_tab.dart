@@ -80,7 +80,7 @@ class _ReceiveTabState extends State<ReceiveTab> {
                               final activeTab = ref.watch(homePageControllerProvider.select((state) => state.currentTab));
                               return RotatingWidget(
                                 duration: const Duration(seconds: 15),
-                                spinning: serverState != null && animations && activeTab == HomeTab.receive,
+                                spinning: serverState != null && animations && activeTab == HomeTab.send,
                                 child: const LocalSendLogo(withText: false),
                               );
                             },
