@@ -12,8 +12,13 @@ import 'package:localsend_app/pages/tabs/omnidrop_tabs.dart';
 import 'package:localsend_app/pages/tabs/receive_tab.dart';
 import 'package:localsend_app/pages/tabs/send_tab.dart';
 import 'package:localsend_app/pages/tabs/settings_tab.dart';
+import 'package:localsend_app/model/send_mode.dart';
+import 'package:localsend_app/pages/web_share_page.dart';
+import 'package:localsend_app/provider/settings_provider.dart';
 import 'package:localsend_app/provider/selection/selected_sending_files_provider.dart';
 import 'package:localsend_app/util/native/cross_file_converters.dart';
+import 'package:localsend_app/util/native/file_picker.dart';
+import 'package:localsend_app/widget/dialogs/add_file_dialog.dart';
 import 'package:localsend_app/widget/responsive_builder.dart';
 import 'package:refena_flutter/refena_flutter.dart';
 import 'package:routerino/routerino.dart';
@@ -116,6 +121,7 @@ class _HomePageState extends State<HomePage> with Refena {
       },
       child: ResponsiveBuilder(
         builder: (sizingInformation) {
+          final colors = Theme.of(context).colorScheme;
           return Scaffold(
             key: _scaffoldKey,
             drawer: const OmniDropDrawer(),
@@ -131,6 +137,9 @@ class _HomePageState extends State<HomePage> with Refena {
                   const Text('OmniDrop'),
                   IconButton(
                     tooltip: 'Open menu',
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(width: 32, height: 32),
                     onPressed: () => _scaffoldKey.currentState?.openDrawer(),
                     icon: const Icon(Icons.more_vert),
                   ),
@@ -256,37 +265,49 @@ class _HomePageState extends State<HomePage> with Refena {
               ],
             ),
             bottomNavigationBar: sizingInformation.isMobile
-                ? SafeArea(
-                    top: false,
-                    child: SizedBox(
-                      height: 68,
-                      child: Row(
-                        children: HomeTab.values.map((tab) {
-                          final selected = vm.currentTab == tab;
-                          if (tab == HomeTab.send) {
+                ? DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                        colors: [
+                          Color.alphaBlend(colors.primary.withValues(alpha: 0.12), colors.surface),
+                          Color.alphaBlend(colors.secondary.withValues(alpha: 0.10), colors.surface),
+                        ],
+                      ),
+                    ),
+                    child: SafeArea(
+                      top: false,
+                      child: SizedBox(
+                        height: 68,
+                        child: Row(
+                          children: HomeTab.values.map((tab) {
+                            final selected = vm.currentTab == tab;
+                            if (tab == HomeTab.send) {
+                              return Expanded(
+                                child: Center(
+                                  child: FloatingActionButton(
+                                    heroTag: 'transfer-tab',
+                                    onPressed: () => vm.changeTab(tab),
+                                    child: Icon(tab.icon),
+                                  ),
+                                ),
+                              );
+                            }
                             return Expanded(
-                              child: Center(
-                                child: FloatingActionButton(
-                                  heroTag: 'transfer-tab',
-                                  onPressed: () => vm.changeTab(tab),
-                                  child: Icon(tab.icon),
+                              child: InkWell(
+                                onTap: () => vm.changeTab(tab),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(tab.icon, color: selected ? colors.primary : null),
+                                    Text(tab.label, style: Theme.of(context).textTheme.labelSmall),
+                                  ],
                                 ),
                               ),
                             );
-                          }
-                          return Expanded(
-                            child: InkWell(
-                              onTap: () => vm.changeTab(tab),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(tab.icon, color: selected ? Theme.of(context).colorScheme.primary : null),
-                                  Text(tab.label, style: Theme.of(context).textTheme.labelSmall),
-                                ],
-                              ),
-                            ),
-                          );
-                        }).toList(),
+                          }).toList(),
+                        ),
                       ),
                     ),
                   )
@@ -298,17 +319,130 @@ class _HomePageState extends State<HomePage> with Refena {
   }
 }
 
-class _TransferTab extends StatelessWidget {
+class _TransferTab extends StatefulWidget {
   const _TransferTab();
 
   @override
-  Widget build(BuildContext context) => DefaultTabController(
-    length: 2,
-    child: Column(
+  State<_TransferTab> createState() => _TransferTabState();
+}
+
+class _TransferTabState extends State<_TransferTab> with Refena {
+  bool _showReceive = false;
+
+  Future<void> _showSendOptions() async {
+    setState(() => _showReceive = false);
+    await showDialog<void>(
+      context: context,
+      builder: (_) => _SendOptionsDialog(onCreateQr: _createTemporaryQr),
+    );
+  }
+
+  Future<void> _createTemporaryQr() async {
+    var files = ref.read(selectedSendingFilesProvider);
+    if (files.isEmpty) {
+      await AddFileDialog.open(context: context, options: pickerOptions);
+      files = ref.read(selectedSendingFilesProvider);
+    }
+    if (!mounted || files.isEmpty) return;
+    await context.push(() => WebSharePage(files: files, showQrOnStart: true));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Stack(
       children: [
-        const TabBar(tabs: [Tab(text: 'Send'), Tab(text: 'Receive')]),
-        const Expanded(child: TabBarView(children: [SendTab(), ReceiveTab()])),
+        Positioned.fill(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 68, bottom: 68),
+            child: _showReceive ? const ReceiveTab() : const SendTab(),
+          ),
+        ),
+        Positioned(
+          top: 10,
+          left: 0,
+          right: 0,
+          child: Center(
+            child: FilledButton.icon(
+              onPressed: _showSendOptions,
+              icon: const Icon(Icons.send),
+              label: const Text('Send'),
+            ),
+          ),
+        ),
+        Positioned(
+          bottom: 10,
+          left: 0,
+          right: 0,
+          child: Center(
+            child: FilledButton.tonalIcon(
+              onPressed: () => setState(() => _showReceive = true),
+              style: FilledButton.styleFrom(
+                backgroundColor: colors.secondaryContainer,
+                foregroundColor: colors.onSecondaryContainer,
+              ),
+              icon: const Icon(Icons.download),
+              label: const Text('Receive'),
+            ),
+          ),
+        ),
       ],
-    ),
-  );
+    );
+  }
+}
+
+class _SendOptionsDialog extends StatelessWidget {
+  final Future<void> Function() onCreateQr;
+
+  const _SendOptionsDialog({required this.onCreateQr});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer(
+      builder: (context, ref) {
+        final settings = ref.watch(settingsProvider);
+        final isLinkMode = settings.sendMode == SendMode.link;
+        return AlertDialog(
+          title: const Text('Send options'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Connection mode: WebDrop link'),
+                  value: isLinkMode,
+                  onChanged: (enabled) async => await ref.notifier(settingsProvider).setSendMode(enabled ? SendMode.link : SendMode.single),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Multiple recipients'),
+                  value: settings.sendMode == SendMode.multiple,
+                  onChanged: (enabled) async => await ref.notifier(settingsProvider).setSendMode(enabled ? SendMode.multiple : SendMode.single),
+                ),
+                if (isLinkMode)
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Automatically accept browser downloads'),
+                    value: settings.shareViaLinkAutoAccept,
+                    onChanged: (enabled) async => await ref.notifier(settingsProvider).setShareViaLinkAutoAccept(enabled),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+            FilledButton.icon(
+              onPressed: () async {
+                Navigator.pop(context);
+                await onCreateQr();
+              },
+              icon: const Icon(Icons.qr_code_2),
+              label: const Text('Create temporary QR'),
+            ),
+          ],
+        );
+      },
+    );
+  }
 }

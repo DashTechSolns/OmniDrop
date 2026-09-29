@@ -51,10 +51,7 @@ class SettingsTab extends StatelessWidget {
               child: Text(t.settingsTab.title, style: Theme.of(context).textTheme.titleLarge, textAlign: TextAlign.center),
             ),
             const SizedBox(height: 30),
-            _SettingsSection(
-              title: t.settingsTab.general.title,
-              children: [
-                if (checkPlatformIsDesktop()) ...[
+            if (checkPlatformIsDesktop()) ...[
                   /// Wayland does window position handling, so there's no need for it. See [https://github.com/localsend/localsend/issues/544]
                   if (vm.advanced && checkPlatformIsNotWaylandDesktop())
                     _BooleanEntry(
@@ -104,8 +101,6 @@ class SettingsTab extends StatelessWidget {
                     ),
                   ],
                 ],
-              ],
-            ),
             _SettingsSection(
               title: t.settingsTab.receive.title,
               children: [
@@ -205,32 +200,12 @@ class SettingsTab extends StatelessWidget {
                     },
                   ),
                 _BooleanEntry(
-                  label: t.settingsTab.receive.autoFinish,
-                  value: vm.settings.autoFinish,
-                  onChanged: (b) async {
-                    await ref.notifier(settingsProvider).setAutoFinish(b);
-                  },
-                ),
-                _BooleanEntry(
                   label: t.settingsTab.receive.saveToHistory,
                   value: vm.settings.saveToHistory,
                   onChanged: (b) async {
                     await ref.notifier(settingsProvider).setSaveToHistory(b);
                   },
                 ),
-                if (vm.advanced)
-                  _BooleanEntry(
-                    label: t.settingsTab.receive.verifyChecksums,
-                    value: vm.settings.verifyChecksums,
-                    onChanged: (b) async {
-                      await ref.notifier(settingsProvider).setVerifyChecksums(b);
-
-                      // The checksums are verified by the Rust server, so it needs a restart.
-                      if (ref.read(serverProvider) != null) {
-                        await ref.notifier(serverProvider).restartServerFromSettings();
-                      }
-                    },
-                  ),
               ],
             ),
             if (vm.advanced)
@@ -242,13 +217,6 @@ class SettingsTab extends StatelessWidget {
                     value: vm.settings.shareViaLinkAutoAccept,
                     onChanged: (b) async {
                       await ref.notifier(settingsProvider).setShareViaLinkAutoAccept(b);
-                    },
-                  ),
-                  _BooleanEntry(
-                    label: t.settingsTab.send.createChecksums,
-                    value: vm.settings.createChecksums,
-                    onChanged: (b) async {
-                      await ref.notifier(settingsProvider).setCreateChecksums(b);
                     },
                   ),
                 ],

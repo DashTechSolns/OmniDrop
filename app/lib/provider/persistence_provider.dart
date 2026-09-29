@@ -186,13 +186,13 @@ class PersistenceService {
     }
 
     if (prefs.getString(_colorKey) == null) {
-      await _initColorSetting(prefs, supportsDynamicColors);
+      await _initColorSetting(prefs);
     } else {
       // fix when device does not support dynamic colors
       final supported = supportsDynamicColors ? ColorMode.values : ColorMode.values.where((e) => e != ColorMode.system);
       final colorMode = supported.firstWhereOrNull((color) => color.name == prefs.getString(_colorKey));
       if (colorMode == null) {
-        await _initColorSetting(prefs, supportsDynamicColors);
+        await _initColorSetting(prefs);
       }
     }
 
@@ -209,11 +209,8 @@ class PersistenceService {
     return PersistenceService._(prefs, isFirstAppStart);
   }
 
-  static Future<void> _initColorSetting(SharedPreferences prefs, bool supportsDynamicColors) async {
-    await prefs.setString(
-      _colorKey,
-      checkPlatform([TargetPlatform.android]) && supportsDynamicColors ? ColorMode.system.name : ColorMode.localsend.name,
-    );
+  static Future<void> _initColorSetting(SharedPreferences prefs) async {
+    await prefs.setString(_colorKey, ColorMode.localsend.name);
   }
 
   bool isPortableMode() {
@@ -302,9 +299,9 @@ class PersistenceService {
   ThemeMode getTheme() {
     final value = _prefs.getString(_themeKey);
     if (value == null) {
-      return ThemeMode.system;
+      return ThemeMode.dark;
     }
-    return ThemeMode.values.firstWhereOrNull((theme) => theme.name == value) ?? ThemeMode.system;
+    return ThemeMode.values.firstWhereOrNull((theme) => theme.name == value) ?? ThemeMode.dark;
   }
 
   Future<void> setTheme(ThemeMode theme) async {

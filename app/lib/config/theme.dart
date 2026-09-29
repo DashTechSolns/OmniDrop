@@ -58,6 +58,11 @@ ThemeData getTheme(ColorMode colorMode, Color customColor, Brightness brightness
     useMaterial3: true,
     // same density on all platforms so desktop matches mobile (defaults to compact on desktop)
     visualDensity: VisualDensity.standard,
+    appBarTheme: AppBarTheme(
+      backgroundColor: Color.alphaBlend(colorScheme.primary.withValues(alpha: 0.12), colorScheme.surface),
+      foregroundColor: colorScheme.onSurface,
+      surfaceTintColor: Colors.transparent,
+    ),
     navigationBarTheme: colorScheme.brightness == Brightness.dark
         ? NavigationBarThemeData(
             iconTheme: WidgetStateProperty.all(const IconThemeData(color: Colors.white)),

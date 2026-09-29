@@ -17,61 +17,87 @@ class WebDropTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final files = context.watch(selectedSendingFilesProvider);
     final ref = context.ref;
-    return ListView(
-      padding: const EdgeInsets.all(20),
+    final colors = Theme.of(context).colorScheme;
+    return Stack(
       children: [
-        Text('WebDrop', style: Theme.of(context).textTheme.headlineSmall),
-        const SizedBox(height: 8),
-        Text('Share files with a browser or receive files from one.', style: Theme.of(context).textTheme.bodyMedium),
-        const SizedBox(height: 18),
-        OutlinedButton.icon(
-          onPressed: () => context.push(() => const WebSharePage()),
-          icon: const Icon(Icons.file_download_outlined),
-          label: const Text('Receive from browser'),
-        ),
-        const SizedBox(height: 20),
-        Row(
-          children: [
-            Expanded(child: Text('Staged files', style: Theme.of(context).textTheme.titleMedium)),
-            IconButton(
-              tooltip: 'Add files',
-              onPressed: () async {
-                final options = FilePickerOption.getOptionsForPlatform();
-                if (options.length == 1) {
-                  await ref.global.dispatchAsync(PickFileAction(option: options.first, context: context));
-                } else {
-                  await AddFileDialog.open(context: context, options: options);
-                }
-              },
-              icon: const Icon(Icons.add),
+        Positioned.fill(
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 76),
+            child: ListView(
+              padding: const EdgeInsets.all(20),
+              children: [
+                Text('WebDrop', style: Theme.of(context).textTheme.headlineSmall),
+                const SizedBox(height: 8),
+                Text('Share files with a browser or receive files from one.', style: Theme.of(context).textTheme.bodyMedium),
+                const SizedBox(height: 20),
+                Card(
+                  color: colors.surfaceContainerLow,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Staged files', style: Theme.of(context).textTheme.titleMedium),
+                        if (files.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            child: Text('No files selected', style: Theme.of(context).textTheme.bodyMedium),
+                          )
+                        else ...[
+                          const SizedBox(height: 8),
+                          ...files.map(
+                            (file) => ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(Icons.insert_drive_file_outlined),
+                              title: Text(file.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                              subtitle: Text(file.size.asReadableFileSize),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed: () async {
+                                final options = FilePickerOption.getOptionsForPlatform();
+                                if (options.length == 1) {
+                                  await ref.global.dispatchAsync(PickFileAction(option: options.first, context: context));
+                                } else {
+                                  await AddFileDialog.open(context: context, options: options);
+                                }
+                              },
+                              icon: const Icon(Icons.add),
+                              label: const Text('Add/select files'),
+                            ),
+                            TextButton.icon(
+                              onPressed: files.isEmpty ? null : () => ref.redux(selectedSendingFilesProvider).dispatch(ClearSelectionAction()),
+                              icon: const Icon(Icons.delete_outline),
+                              label: const Text('Clear staged files'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
-        if (files.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 20),
-            child: Text('No files selected', style: Theme.of(context).textTheme.bodyMedium),
-          )
-        else ...[
-          ...files.map(
-            (file) => ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.insert_drive_file_outlined),
-              title: Text(file.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-              subtitle: Text(file.size.asReadableFileSize),
+        Positioned(
+          bottom: 10,
+          left: 0,
+          right: 0,
+          child: Center(
+            child: FilledButton.icon(
+              onPressed: () async => await context.push(() => files.isEmpty ? const WebSharePage() : WebSharePage(files: files)),
+              icon: const Icon(Icons.language),
+              label: const Text('Start WebDrop'),
             ),
           ),
-          const SizedBox(height: 8),
-          FilledButton.icon(
-            onPressed: () async => await context.push(() => WebSharePage(files: files)),
-            icon: const Icon(Icons.qr_code_2),
-            label: const Text('Start WebDrop'),
-          ),
-          TextButton(
-            onPressed: () => ref.redux(selectedSendingFilesProvider).dispatch(ClearSelectionAction()),
-            child: const Text('Clear staged files'),
-          ),
-        ],
+        ),
       ],
     );
   }
@@ -206,7 +232,7 @@ class _MeTabState extends State<MeTab> with Refena {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        Text('Me', style: Theme.of(context).textTheme.headlineSmall),
+        Center(child: Text('Me', style: Theme.of(context).textTheme.headlineSmall)),
         const SizedBox(height: 20),
         Center(
           child: InkWell(
@@ -223,10 +249,18 @@ class _MeTabState extends State<MeTab> with Refena {
           onChanged: (value) async => await ref.notifier(settingsProvider).setAlias(value),
         ),
         const SizedBox(height: 24),
-        _ProfileMetric(label: 'Total sent', value: 'Not tracked'),
-        _ProfileMetric(label: 'Total received', value: totalReceived.asReadableFileSize),
-        _ProfileMetric(label: 'Unique senders (by name)', value: '$uniqueSenders recorded'),
-        _ProfileMetric(label: 'Total data transferred', value: '${totalReceived.asReadableFileSize} received'),
+        SizedBox(
+          height: 126,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              _ProfileMetric(label: 'Total sent', value: 'Not tracked'),
+              _ProfileMetric(label: 'Total received', value: totalReceived.asReadableFileSize),
+              _ProfileMetric(label: 'Unique senders (by name)', value: '$uniqueSenders recorded'),
+              _ProfileMetric(label: 'Total data transferred', value: '${totalReceived.asReadableFileSize} received'),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -239,9 +273,22 @@ class _ProfileMetric extends StatelessWidget {
   const _ProfileMetric({required this.label, required this.value});
 
   @override
-  Widget build(BuildContext context) => ListTile(
-    contentPadding: EdgeInsets.zero,
-    title: Text(label),
-    trailing: Text(value, style: Theme.of(context).textTheme.titleSmall),
+  Widget build(BuildContext context) => Card(
+    margin: const EdgeInsets.only(right: 10),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+    child: SizedBox(
+      width: 175,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(label, textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyMedium),
+            const SizedBox(height: 8),
+            Text(value, textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleSmall),
+          ],
+        ),
+      ),
+    ),
   );
 }

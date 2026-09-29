@@ -17,7 +17,6 @@ import 'package:localsend_app/provider/settings_provider.dart';
 import 'package:localsend_app/util/favorites.dart';
 import 'package:localsend_app/util/native/file_picker.dart';
 import 'package:localsend_app/util/native/platform_check.dart';
-import 'package:localsend_app/widget/big_button.dart';
 import 'package:localsend_app/widget/custom_icon_button.dart';
 import 'package:localsend_app/widget/dialogs/add_file_dialog.dart';
 import 'package:localsend_app/widget/dialogs/send_mode_help_dialog.dart';
@@ -25,9 +24,7 @@ import 'package:localsend_app/widget/file_thumbnail.dart';
 import 'package:localsend_app/widget/list_tile/device_list_tile.dart';
 import 'package:localsend_app/widget/list_tile/device_placeholder_list_tile.dart';
 import 'package:localsend_app/widget/opacity_slideshow.dart';
-import 'package:localsend_app/widget/responsive_builder.dart';
 import 'package:localsend_app/widget/responsive_list_view.dart';
-import 'package:localsend_app/widget/responsive_wrap_view.dart';
 import 'package:localsend_app/widget/rotating_widget.dart';
 import 'package:localsend_isolates/model/device.dart';
 import 'package:localsend_isolates/model/session_status.dart';
@@ -47,126 +44,115 @@ class SendTab extends StatelessWidget {
       provider: (ref) => sendTabVmProvider,
       init: (context) async => context.global.dispatchAsync(SendTabInitAction(context)), // ignore: discarded_futures
       builder: (context, vm) {
-        final sizingInformation = SizingInformation(MediaQuery.sizeOf(context).width);
-        final buttonWidth = sizingInformation.isDesktop ? BigButton.desktopWidth : BigButton.mobileWidth;
         final ref = context.ref;
+        final colors = Theme.of(context).colorScheme;
         return ResponsiveListView(
           padding: EdgeInsets.zero,
           children: [
             const SizedBox(height: 20),
-            if (vm.selectedFiles.isEmpty) ...[
-              Padding(
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: _horizontalPadding),
+              child: Text(t.sendTab.selection.title, style: Theme.of(context).textTheme.titleMedium),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 48,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: _horizontalPadding),
-                child: Text(
-                  t.sendTab.selection.title,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-              ResponsiveWrapView(
-                outerHorizontalPadding: 15,
-                outerVerticalPadding: 10,
-                childPadding: 10,
-                minChildWidth: buttonWidth,
                 children: pickerOptions.map((option) {
-                  return BigButton(
-                    icon: option.icon,
-                    label: option.label,
-                    filled: false,
-                    onTap: () async => ref.global.dispatchAsync(
-                      PickFileAction(
-                        option: option,
-                        context: context,
-                      ),
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ActionChip(
+                      avatar: Icon(option.icon, size: 18),
+                      label: Text(option.label),
+                      backgroundColor: colors.primaryContainer,
+                      onPressed: () async => ref.global.dispatchAsync(PickFileAction(option: option, context: context)),
                     ),
                   );
                 }).toList(),
               ),
-            ] else ...[
-              Card(
-                margin: const EdgeInsets.only(bottom: 10, left: _horizontalPadding, right: _horizontalPadding),
-                child: Padding(
-                  padding: const EdgeInsetsDirectional.only(start: 15, top: 5, bottom: 15),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            t.sendTab.selection.title,
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          const Spacer(),
-                          CustomIconButton(
-                            onPressed: () => ref.redux(selectedSendingFilesProvider).dispatch(ClearSelectionAction()),
-                            child: Icon(Icons.close, color: Theme.of(context).colorScheme.secondary),
-                          ),
-                          const SizedBox(width: 5),
-                        ],
-                      ),
-                      const SizedBox(height: 5),
-                      Text(t.sendTab.selection.files(files: vm.selectedFiles.length)),
-                      Text(t.sendTab.selection.size(size: vm.selectedFiles.fold(0, (prev, curr) => prev + curr.size).asReadableFileSize)),
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        height: defaultThumbnailSize,
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: vm.selectedFiles.length,
-                          itemBuilder: (context, index) {
-                            final file = vm.selectedFiles[index];
-                            return Padding(
-                              padding: const EdgeInsets.only(right: 10),
-                              child: SmartFileThumbnail.fromCrossFile(file),
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          TextButton(
-                            style: TextButton.styleFrom(
-                              foregroundColor: Theme.of(context).colorScheme.onSurface,
-                            ),
-                            onPressed: () async {
-                              await context.push(() => const SelectedFilesPage());
-                            },
-                            child: Text(t.general.edit),
-                          ),
-                          const SizedBox(width: 15),
-                          ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Theme.of(context).colorScheme.primary,
-                              foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                            ),
-                            onPressed: () async {
-                              if (pickerOptions.length == 1) {
-                                // open directly
-                                await ref.global.dispatchAsync(
-                                  PickFileAction(
-                                    option: pickerOptions.first,
-                                    context: context,
-                                  ),
-                                );
-                                return;
-                              }
-                              await AddFileDialog.open(
-                                context: context,
-                                options: pickerOptions,
-                              );
-                            },
-                            icon: const Icon(Icons.add),
-                            label: Text(t.general.add),
-                          ),
-                          const SizedBox(width: 15),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
+            ),
+            Card(
+              margin: const EdgeInsets.only(top: 8, bottom: 10, left: _horizontalPadding, right: _horizontalPadding),
+              color: Colors.transparent,
+              elevation: 0,
+              surfaceTintColor: Colors.transparent,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(5),
+                side: BorderSide(color: colors.outlineVariant),
               ),
-            ],
+              child: Padding(
+                padding: const EdgeInsetsDirectional.only(start: 15, top: 8, bottom: 15, end: 8),
+                child: vm.selectedFiles.isEmpty
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.folder_open_outlined, color: colors.secondary),
+                          const SizedBox(height: 8),
+                          Text('In-app file browser coming soon', style: Theme.of(context).textTheme.titleSmall),
+                          const SizedBox(height: 4),
+                          Text('Choose a file type above to add items to your selection.'),
+                        ],
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(t.sendTab.selection.files(files: vm.selectedFiles.length)),
+                              const Spacer(),
+                              CustomIconButton(
+                                onPressed: () => ref.redux(selectedSendingFilesProvider).dispatch(ClearSelectionAction()),
+                                child: Icon(Icons.close, color: colors.secondary),
+                              ),
+                            ],
+                          ),
+                          Text(t.sendTab.selection.size(size: vm.selectedFiles.fold(0, (prev, curr) => prev + curr.size).asReadableFileSize)),
+                          const SizedBox(height: 10),
+                          SizedBox(
+                            height: defaultThumbnailSize,
+                            child: ListView.builder(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: vm.selectedFiles.length,
+                              itemBuilder: (context, index) {
+                                final file = vm.selectedFiles[index];
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 10),
+                                  child: SmartFileThumbnail.fromCrossFile(file),
+                                );
+                              },
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              TextButton(
+                                style: TextButton.styleFrom(foregroundColor: colors.onSurface),
+                                onPressed: () async => await context.push(() => const SelectedFilesPage()),
+                                child: Text(t.general.edit),
+                              ),
+                              const SizedBox(width: 8),
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(backgroundColor: colors.primary, foregroundColor: colors.onPrimary),
+                                onPressed: () async {
+                                  if (pickerOptions.length == 1) {
+                                    await ref.global.dispatchAsync(PickFileAction(option: pickerOptions.first, context: context));
+                                    return;
+                                  }
+                                  await AddFileDialog.open(context: context, options: pickerOptions);
+                                },
+                                icon: const Icon(Icons.add),
+                                label: Text(t.general.add),
+                              ),
+                              const SizedBox(width: 8),
+                            ],
+                          ),
+                        ],
+                      ),
+              ),
+            ),
             Row(
               children: [
                 const SizedBox(width: _horizontalPadding),

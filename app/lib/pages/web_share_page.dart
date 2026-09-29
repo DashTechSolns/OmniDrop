@@ -31,8 +31,9 @@ class WebSharePage extends StatefulWidget {
   /// The files offered for download (share via link).
   /// `null` serves the upload page instead (receive via link).
   final List<CrossFile>? files;
+  final bool showQrOnStart;
 
-  const WebSharePage({this.files});
+  const WebSharePage({this.files, this.showQrOnStart = false});
 
   @override
   State<WebSharePage> createState() => _WebSharePageState();
@@ -42,6 +43,7 @@ class _WebSharePageState extends State<WebSharePage> with Refena {
   _ServerState _stateEnum = _ServerState.initializing;
   bool _encrypted = false;
   String? _initializedError;
+  bool _initialQrOpened = false;
 
   bool get _sendMode => widget.files != null;
 
@@ -93,6 +95,29 @@ class _WebSharePageState extends State<WebSharePage> with Refena {
       setState(() {
         _stateEnum = _ServerState.running;
       });
+      if (widget.showQrOnStart && !_initialQrOpened) {
+        _initialQrOpened = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          final localIps = ref.read(localIpProvider).localIps;
+          final serverState = ref.read(serverProvider);
+          if (localIps.isEmpty || serverState == null) return;
+          final url = '${_encrypted ? 'https' : 'http'}://${localIps.first}:${serverState.port}';
+          final pin = serverState.web?.pin;
+          final urlWithPin = pin == null ? url : '$url/?pin=${Uri.encodeQueryComponent(pin)}';
+          unawaited(
+            showDialog<void>(
+              context: context,
+              builder: (_) => QrDialog(
+                data: urlWithPin,
+                label: url,
+                listenIncomingWebDownloadRequests: _sendMode,
+                pin: pin,
+              ),
+            ),
+          );
+        });
+      }
     } catch (e) {
       if (context.mounted) {
         setState(() {
