@@ -106,6 +106,8 @@
 
 	<key>NSPhotoLibraryUsageDescription</key>
     <string>The app needs photo library access so that the user can select photos to share.</string>
+    <key>NSCameraUsageDescription</key>
+    <string>OmniDrop uses the camera to scan WebDrop pairing QR codes.</string>
     <key>NSPhotoLibraryAddUsageDescription</key>
     <string>The app saves received media to the photo library.</string>
     <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>

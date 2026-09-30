@@ -8,17 +8,23 @@ import 'package:localsend_app/model/cross_file.dart';
 import 'package:localsend_app/model/state/server/web_share_state.dart';
 import 'package:localsend_app/provider/local_ip_provider.dart';
 import 'package:localsend_app/provider/network/server/server_provider.dart';
+import 'package:localsend_app/provider/selection/selected_sending_files_provider.dart';
 import 'package:localsend_app/provider/settings_provider.dart';
 import 'package:localsend_app/util/native/platform_check.dart';
 import 'package:localsend_app/util/ui/snackbar.dart';
+import 'package:localsend_app/util/native/file_picker.dart';
+import 'package:localsend_app/widget/dialogs/add_file_dialog.dart';
 import 'package:localsend_app/widget/dialogs/pin_dialog.dart';
 import 'package:localsend_app/widget/dialogs/qr_dialog.dart';
-import 'package:localsend_app/widget/dialogs/zoom_dialog.dart';
+import 'package:localsend_app/widget/animated_press.dart';
 import 'package:localsend_app/widget/responsive_list_view.dart';
 import 'package:localsend_isolates/util/sleep.dart';
+import 'package:localsend_isolates/util/file_size_helper.dart';
 import 'package:logging/logging.dart';
+import 'package:pretty_qr_code/pretty_qr_code.dart';
 import 'package:refena_flutter/refena_flutter.dart';
 import 'package:routerino/routerino.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 final _logger = Logger('WebSharePage');
 
@@ -46,6 +52,7 @@ class _WebSharePageState extends State<WebSharePage> with Refena {
   bool _encrypted = false;
   String? _initializedError;
   bool _initialQrOpened = false;
+  late List<CrossFile> _stagedFiles = [...?widget.files];
 
   bool get _sendMode => widget.files != null;
 
@@ -66,14 +73,14 @@ class _WebSharePageState extends State<WebSharePage> with Refena {
     });
     await sleepAsync(500);
     try {
-      final files = widget.files;
+      final files = _stagedFiles;
 
       // The pin of a previous web share session is kept;
       // receive mode initially uses the receive pin from settings.
       final previousWeb = ref.read(serverProvider)?.web;
       final webPin = previousWeb != null ? previousWeb.pin : (files == null ? settings.receivePin : null);
 
-      if (files != null) {
+      if (_sendMode) {
         // The auto accept setting of a previous web download state is kept.
         await ref
             .notifier(serverProvider)
@@ -133,6 +140,24 @@ class _WebSharePageState extends State<WebSharePage> with Refena {
   /// Web share uses unencrypted http by default, so we need to revert to the previous state.
   Future<void> _revertServerState() async {
     await ref.notifier(serverProvider).restartServerFromSettings();
+  }
+
+  Future<void> _addStagedFiles() async {
+    final options = FilePickerOption.getOptionsForPlatform();
+    if (options.length == 1) {
+      await ref.global.dispatchAsync(PickFileAction(option: options.first, context: context));
+    } else {
+      await AddFileDialog.open(context: context, options: options);
+    }
+    if (!mounted) return;
+    setState(() => _stagedFiles = [...ref.read(selectedSendingFilesProvider)]);
+    if (_sendMode) await _init(encrypted: _encrypted);
+  }
+
+  Future<void> _clearStagedFiles() async {
+    ref.redux(selectedSendingFilesProvider).dispatch(ClearSelectionAction());
+    setState(() => _stagedFiles = []);
+    if (_sendMode) await _init(encrypted: _encrypted);
   }
 
   @override
@@ -206,227 +231,239 @@ class _WebSharePageState extends State<WebSharePage> with Refena {
             final settings = context.watch(settingsProvider);
             final pin = serverState.web?.pin;
 
+            final firstIp = networkState.localIps.isEmpty ? null : networkState.localIps.first;
+            final localUrl = firstIp == null ? null : '${_encrypted ? 'https' : 'http'}://$firstIp:${serverState.port}';
+            final shareUrl = localUrl == null || pin == null ? localUrl : '$localUrl/?pin=${Uri.encodeQueryComponent(pin)}';
+            final clients = webDownloadState?.sessions.values.toList() ?? const [];
+
             return ResponsiveListView(
               padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 20),
               children: [
-                Text(t.webSharePage.openLink(n: networkState.localIps.length), style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 10),
                 Card(
-                  color: Theme.of(context).colorScheme.secondaryContainer,
                   child: Padding(
-                    padding: const EdgeInsets.all(10),
+                    padding: const EdgeInsets.all(16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        ...networkState.localIps.map((ip) {
-                          final url = '${_encrypted ? 'https' : 'http'}://$ip:${serverState.port}';
-                          final urlWithPin = switch (pin) {
-                            String() => '$url/?pin=${Uri.encodeQueryComponent(pin)}',
-                            null => url,
-                          };
-                          return Padding(
-                            padding: const EdgeInsets.all(5),
-                            child: Row(
-                              children: [
-                                SelectableText(
-                                  url,
-                                  style: Theme.of(context).textTheme.bodyMedium,
+                        Row(
+                          children: [
+                            const _PulsingStatusDot(),
+                            const SizedBox(width: 10),
+                            Expanded(child: Text('WebDrop is online', style: Theme.of(context).textTheme.titleLarge)),
+                            Text('ACTIVE', style: Theme.of(context).textTheme.labelLarge?.copyWith(color: Theme.of(context).colorScheme.tertiary)),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        if (shareUrl != null) ...[
+                          Center(
+                            child: Container(
+                              width: 196,
+                              height: 196,
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.surface,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: PrettyQrView.data(
+                                errorCorrectLevel: QrErrorCorrectLevel.Q,
+                                data: shareUrl,
+                                decoration: PrettyQrDecoration(
+                                  shape: PrettyQrSmoothSymbol(color: Theme.of(context).colorScheme.onSurface),
                                 ),
-                                const SizedBox(width: 5),
-                                InkWell(
-                                  onTap: () async {
-                                    await Clipboard.setData(ClipboardData(text: url));
-                                    if (context.mounted && checkPlatformIsDesktop()) {
-                                      context.showSnackBar(t.general.copiedToClipboard);
-                                    }
-                                  },
-                                  child: const Padding(
-                                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    child: Icon(Icons.content_copy, size: 16),
-                                  ),
-                                ),
-                                InkWell(
-                                  onTap: () async {
-                                    await showDialog(
-                                      context: context,
-                                      builder: (_) => QrDialog(
-                                        data: urlWithPin,
-                                        label: url,
-                                        listenIncomingWebDownloadRequests: _sendMode,
-                                        pin: pin,
-                                      ),
-                                    );
-                                  },
-                                  child: const Padding(
-                                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    child: Icon(Icons.qr_code, size: 16),
-                                  ),
-                                ),
-                                InkWell(
-                                  onTap: () async {
-                                    await showDialog(
-                                      context: context,
-                                      builder: (_) => ZoomDialog(
-                                        label: url,
-                                        listenIncomingWebDownloadRequests: _sendMode,
-                                        pin: pin,
-                                      ),
-                                    );
-                                  },
-                                  child: const Padding(
-                                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    child: Icon(Icons.tv, size: 16),
-                                  ),
-                                ),
-                              ],
+                              ),
                             ),
-                          );
-                        }),
+                          ),
+                          const SizedBox(height: 12),
+                          Text('Local URL', style: Theme.of(context).textTheme.labelLarge),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Expanded(child: SelectableText(localUrl!, maxLines: 2)),
+                              Tooltip(
+                                message: 'Copy URL',
+                                child: IconButton(
+                                  onPressed: () async {
+                                    await Clipboard.setData(ClipboardData(text: shareUrl));
+                                    if (context.mounted && checkPlatformIsDesktop()) context.showSnackBar(t.general.copiedToClipboard);
+                                  },
+                                  icon: const Icon(Icons.content_copy),
+                                ),
+                              ),
+                              Tooltip(
+                                message: 'Open WebDrop',
+                                child: IconButton(
+                                  onPressed: () async => await launchUrl(Uri.parse(shareUrl), mode: LaunchMode.externalApplication),
+                                  icon: const Icon(Icons.open_in_new),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ] else
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            child: Text('No local network address is available yet.'),
+                          ),
+                        const Divider(height: 24),
+                        Text('Connected Browser Clients (${clients.length})', style: Theme.of(context).textTheme.titleMedium),
+                        if (clients.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 8, bottom: 8),
+                            child: Text('No browser clients connected.'),
+                          )
+                        else
+                          ...clients.map((session) {
+                            return ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(Icons.laptop_chromebook_outlined),
+                              title: Text(session.deviceInfo, maxLines: 1, overflow: TextOverflow.ellipsis),
+                              subtitle: Text(session.ip),
+                              trailing: session.pending
+                                  ? Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          tooltip: 'Decline',
+                                          onPressed: () => ref.notifier(serverProvider).declineWebDownloadRequest(session.sessionId),
+                                          icon: const Icon(Icons.close),
+                                        ),
+                                        IconButton(
+                                          tooltip: 'Accept',
+                                          onPressed: () => ref.notifier(serverProvider).acceptWebDownloadRequest(session.sessionId),
+                                          icon: const Icon(Icons.check_circle_outline),
+                                        ),
+                                      ],
+                                    )
+                                  : Text(t.general.accepted),
+                            );
+                          }),
+                        const Divider(height: 24),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Pairing PIN Protection'),
+                          value: pin != null,
+                          onChanged: (value) async {
+                            if (pin != null) {
+                              await ref.notifier(serverProvider).setWebPin(null);
+                            } else {
+                              final newPin = await showDialog<String>(
+                                context: context,
+                                builder: (_) => const PinDialog(obscureText: false, generateRandom: true),
+                              );
+                              if (newPin != null && newPin.isNotEmpty) await ref.notifier(serverProvider).setWebPin(newPin);
+                            }
+                          },
+                        ),
+                        if (pin != null)
+                          Text(t.webSharePage.pinHint(pin: pin), style: TextStyle(color: Theme.of(context).colorScheme.warning)),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(t.webSharePage.encryption),
+                          subtitle: _encrypted ? Text(t.webSharePage.encryptionHint) : null,
+                          value: _encrypted,
+                          onChanged: (value) => _init(encrypted: value),
+                        ),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(t.webSharePage.autoAccept),
+                          value: webDownloadState?.autoAccept ?? settings.receiveViaLinkAutoAccept,
+                          onChanged: (value) async {
+                            if (webDownloadState != null) {
+                              ref.notifier(serverProvider).setWebDownloadAutoAccept(value);
+                            } else {
+                              await ref.notifier(settingsProvider).setReceiveViaLinkAutoAccept(value);
+                            }
+                          },
+                        ),
                       ],
                     ),
                   ),
                 ),
-                const SizedBox(height: 20),
-                if (webDownloadState != null) ...[
-                  Text(t.webSharePage.requests, style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 10),
-                  if (webDownloadState.sessions.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 30),
-                      child: Text(t.webSharePage.noRequests),
-                    ),
-                  ...webDownloadState.sessions.entries.map((entry) {
-                    final session = entry.value;
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(10),
-                          child: Row(
+                if (_sendMode) ...[
+                  const SizedBox(height: 14),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Staged Files (${_stagedFiles.length})', style: Theme.of(context).textTheme.titleMedium),
+                          const SizedBox(height: 4),
+                          const Text('Available to connected browser clients'),
+                          if (_stagedFiles.isEmpty)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 18),
+                              child: Text('No files staged. Browser clients can still send files to this device.'),
+                            )
+                          else
+                            ..._stagedFiles.map(
+                              (file) => ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: const Icon(Icons.insert_drive_file_outlined),
+                                title: Text(file.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                subtitle: Text(file.size.asReadableFileSize),
+                              ),
+                            ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
                             children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      session.deviceInfo,
-                                      style: Theme.of(context).textTheme.bodyLarge!.copyWith(
-                                        color: session.pending ? Theme.of(context).colorScheme.warning : null,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 5),
-                                    Text(session.ip, style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey)),
-                                  ],
+                              AnimatedPress(
+                                child: FilledButton.icon(
+                                  onPressed: _addStagedFiles,
+                                  icon: const Icon(Icons.add),
+                                  label: const Text('+ Add Files'),
                                 ),
                               ),
-                              if (session.pending) ...[
-                                TextButton(
-                                  onPressed: () {
-                                    ref.notifier(serverProvider).declineWebDownloadRequest(session.sessionId);
-                                  },
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: Theme.of(context).colorScheme.onSurface,
-                                    iconSize: 24,
-                                  ),
-                                  child: const Icon(Icons.close),
-                                ),
-                                TextButton(
-                                  onPressed: () {
-                                    ref.notifier(serverProvider).acceptWebDownloadRequest(session.sessionId);
-                                  },
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: Theme.of(context).colorScheme.onSurface,
-                                    iconSize: 24,
-                                  ),
-                                  child: const Icon(Icons.check_circle),
-                                ),
-                              ] else
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                                  child: Text(
-                                    t.general.accepted,
-                                    style: Theme.of(context).textTheme.bodyMedium!.copyWith(
-                                      color: Theme.of(context).colorScheme.onSecondaryContainer,
-                                    ),
-                                  ),
-                                ),
+                              OutlinedButton.icon(
+                                onPressed: _stagedFiles.isEmpty ? null : _clearStagedFiles,
+                                icon: const Icon(Icons.delete_outline),
+                                label: const Text('Clear staged files'),
+                              ),
                             ],
                           ),
-                        ),
+                        ],
                       ),
-                    );
-                  }),
+                    ),
+                  ),
                 ],
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text(t.webSharePage.encryption, style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(width: 10),
-                    Checkbox(
-                      value: _encrypted,
-                      onChanged: (value) {
-                        _init(encrypted: value == true);
-                      },
-                    ),
-                  ],
-                ),
-                if (_encrypted)
-                  Text(
-                    t.webSharePage.encryptionHint,
-                    style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Theme.of(context).colorScheme.warning),
-                  ),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text(t.webSharePage.autoAccept, style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(width: 10),
-                    Checkbox(
-                      value: webDownloadState != null ? webDownloadState.autoAccept : settings.receiveViaLinkAutoAccept,
-                      onChanged: (value) async {
-                        if (webDownloadState != null) {
-                          ref.notifier(serverProvider).setWebDownloadAutoAccept(value == true);
-                        } else {
-                          await ref.notifier(settingsProvider).setReceiveViaLinkAutoAccept(value == true);
-                        }
-                      },
-                    ),
-                  ],
-                ),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text(t.webSharePage.requirePin, style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(width: 10),
-                    Checkbox(
-                      value: pin != null,
-                      onChanged: (value) async {
-                        if (pin != null) {
-                          await ref.notifier(serverProvider).setWebPin(null);
-                        } else {
-                          final String? newPin = await showDialog<String>(
-                            context: context,
-                            builder: (_) => const PinDialog(
-                              obscureText: false,
-                              generateRandom: true,
-                            ),
-                          );
-
-                          if (newPin != null && newPin.isNotEmpty) {
-                            await ref.notifier(serverProvider).setWebPin(newPin);
-                          }
-                        }
-                      },
-                    ),
-                  ],
-                ),
-                if (pin != null)
-                  Text(
-                    t.webSharePage.pinHint(pin: pin),
-                    style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Theme.of(context).colorScheme.warning),
-                  ),
               ],
             );
           },
+        ),
+      ),
+    );
+  }
+}
+
+class _PulsingStatusDot extends StatefulWidget {
+  const _PulsingStatusDot();
+
+  @override
+  State<_PulsingStatusDot> createState() => _PulsingStatusDotState();
+}
+
+class _PulsingStatusDotState extends State<_PulsingStatusDot> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.tertiary;
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) => Container(
+        width: 13,
+        height: 13,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: color,
+          boxShadow: [BoxShadow(color: color.withValues(alpha: 0.25 + _controller.value * 0.45), blurRadius: 4 + _controller.value * 7)],
         ),
       ),
     );

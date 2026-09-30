@@ -43,20 +43,13 @@ class SendTab extends StatelessWidget {
     return ViewModelBuilder(
       provider: (ref) => sendTabVmProvider,
       init: (context) async => context.global.dispatchAsync(SendTabInitAction(context)), // ignore: discarded_futures
-      builder: (context, vm) {
+      builder: (context, _) {
         final ref = context.ref;
         final colors = Theme.of(context).colorScheme;
-        return ResponsiveListView(
-          padding: EdgeInsets.zero,
+        return Column(
           children: [
-            const SizedBox(height: 20),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: _horizontalPadding),
-              child: Text(t.sendTab.selection.title, style: Theme.of(context).textTheme.titleMedium),
-            ),
-            const SizedBox(height: 8),
             SizedBox(
-              height: 48,
+              height: 54,
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: _horizontalPadding),
@@ -80,184 +73,27 @@ class SendTab extends StatelessWidget {
               surfaceTintColor: Colors.transparent,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(5),
-                side: BorderSide(color: colors.outlineVariant),
-              ),
-              child: Padding(
-                padding: const EdgeInsetsDirectional.only(start: 15, top: 8, bottom: 15, end: 8),
-                child: vm.selectedFiles.isEmpty
-                    ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(Icons.folder_open_outlined, color: colors.secondary),
-                          const SizedBox(height: 8),
-                          Text('In-app file browser coming soon', style: Theme.of(context).textTheme.titleSmall),
-                          const SizedBox(height: 4),
-                          Text('Choose a file type above to add items to your selection.'),
-                        ],
-                      )
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Text(t.sendTab.selection.files(files: vm.selectedFiles.length)),
-                              const Spacer(),
-                              CustomIconButton(
-                                onPressed: () => ref.redux(selectedSendingFilesProvider).dispatch(ClearSelectionAction()),
-                                child: Icon(Icons.close, color: colors.secondary),
-                              ),
-                            ],
-                          ),
-                          Text(t.sendTab.selection.size(size: vm.selectedFiles.fold(0, (prev, curr) => prev + curr.size).asReadableFileSize)),
-                          const SizedBox(height: 10),
-                          SizedBox(
-                            height: defaultThumbnailSize,
-                            child: ListView.builder(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: vm.selectedFiles.length,
-                              itemBuilder: (context, index) {
-                                final file = vm.selectedFiles[index];
-                                return Padding(
-                                  padding: const EdgeInsets.only(right: 10),
-                                  child: SmartFileThumbnail.fromCrossFile(file),
-                                );
-                              },
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              TextButton(
-                                style: TextButton.styleFrom(foregroundColor: colors.onSurface),
-                                onPressed: () async => await context.push(() => const SelectedFilesPage()),
-                                child: Text(t.general.edit),
-                              ),
-                              const SizedBox(width: 8),
-                              ElevatedButton.icon(
-                                style: ElevatedButton.styleFrom(backgroundColor: colors.primary, foregroundColor: colors.onPrimary),
-                                onPressed: () async {
-                                  if (pickerOptions.length == 1) {
-                                    await ref.global.dispatchAsync(PickFileAction(option: pickerOptions.first, context: context));
-                                    return;
-                                  }
-                                  await AddFileDialog.open(context: context, options: pickerOptions);
-                                },
-                                icon: const Icon(Icons.add),
-                                label: Text(t.general.add),
-                              ),
-                              const SizedBox(width: 8),
-                            ],
-                          ),
-                        ],
-                      ),
-              ),
-            ),
-            Row(
-              children: [
-                const SizedBox(width: _horizontalPadding),
-                Flexible(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    child: Text(t.sendTab.nearbyDevices, style: Theme.of(context).textTheme.titleMedium),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                _ScanButton(
-                  ips: vm.localIps,
-                ),
-                Tooltip(
-                  message: t.sendTab.manualSending,
-                  child: CustomIconButton(
-                    onPressed: () async => vm.onTapAddress(context),
-                    child: const Icon(Icons.ads_click),
-                  ),
-                ),
-                Tooltip(
-                  message: t.dialogs.favoriteDialog.title,
-                  child: CustomIconButton(
-                    onPressed: () async => await vm.onTapFavorite(context),
-                    child: const Icon(Icons.favorite),
-                  ),
-                ),
-                _SendModeButton(
-                  onSelect: (mode) async => vm.onTapSendMode(context, mode),
-                ),
-              ],
-            ),
-            if (vm.nearbyDevices.isEmpty)
-              const Padding(
-                padding: EdgeInsets.only(bottom: 10, left: _horizontalPadding, right: _horizontalPadding),
-                child: Opacity(
-                  opacity: 0.3,
-                  child: DevicePlaceholderListTile(),
-                ),
-              ),
-            ...vm.nearbyDevices.map((device) {
-              final favoriteEntry = vm.favoriteDevices.findDevice(device);
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 10, left: _horizontalPadding, right: _horizontalPadding),
-                child: Hero(
-                  tag: 'device-${device.ip}',
-                  child: vm.sendMode == SendMode.multiple
-                      ? _MultiSendDeviceListTile(
-                          device: device,
-                          isFavorite: favoriteEntry != null,
-                          nameOverride: favoriteEntry?.alias,
-                          vm: vm,
-                        )
-                      : DeviceListTile(
-                          device: device,
-                          isFavorite: favoriteEntry != null,
-                          nameOverride: favoriteEntry?.alias,
-                          onDetailsTap: () async => await context.push(() => DeviceDetailsPage(device: device)),
-                          onTap: () async => await vm.onTapDevice(context, device),
-                        ),
-                ),
-              );
-            }),
-            const SizedBox(height: 10),
-            Center(
-              child: TextButton(
-                onPressed: () async {
-                  await context.push(() => const TroubleshootPage());
-                },
-                child: Text(t.troubleshootPage.title),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: _horizontalPadding),
-              child: Consumer(
-                builder: (context, ref) {
-                  final animations = ref.watch(animationProvider);
-                  return OpacitySlideshow(
-                    durationMillis: 6000,
-                    running: animations,
+            Expanded(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 28),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
+                      Icon(Icons.folder_open_outlined, size: 42, color: colors.secondary),
+                      const SizedBox(height: 12),
+                      Text('In-app file browser coming soon', style: Theme.of(context).textTheme.titleMedium),
+                      const SizedBox(height: 6),
                       Text(
-                        t.sendTab.help,
-                        style: const TextStyle(color: Colors.grey),
+                        'Choose a file type above to add items to your selection.',
                         textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
                       ),
-                      if (checkPlatformCanReceiveShareIntent())
-                        Text(
-                          t.sendTab.shareIntentInfo,
-                          style: const TextStyle(color: Colors.grey),
-                          textAlign: TextAlign.center,
-                        ),
                     ],
-                  );
-                },
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(height: 50),
-          ],
-        );
-      },
-    );
-  }
-}
+                    padding: const EdgeInsets.symmetric(vertical: 10),
 
 /// A button that opens a popup menu to select [T].
 /// This is used for the scan button and the send mode button.

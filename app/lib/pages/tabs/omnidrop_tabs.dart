@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:localsend_app/pages/web_share_page.dart';
+import 'package:localsend_app/widget/animated_press.dart';
+import 'package:localsend_app/widget/dialogs/receive_pairing_dialog.dart';
 import 'package:localsend_app/provider/persistence_provider.dart';
 import 'package:localsend_app/provider/receive_history_provider.dart';
 import 'package:localsend_app/provider/selection/selected_sending_files_provider.dart';
@@ -26,25 +28,47 @@ class WebDropTab extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
-                Text('WebDrop', style: Theme.of(context).textTheme.headlineSmall),
-                const SizedBox(height: 8),
-                Text('Share files with a browser or receive files from one.', style: Theme.of(context).textTheme.bodyMedium),
-                const SizedBox(height: 20),
                 Card(
-                  color: colors.surfaceContainerLow,
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Staged files', style: Theme.of(context).textTheme.titleMedium),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                width: 38,
+                                height: 38,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: colors.primary.withValues(alpha: 0.14),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text('01', style: Theme.of(context).textTheme.labelLarge?.copyWith(color: colors.primary)),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('Staged Files (${files.length})', style: Theme.of(context).textTheme.titleMedium),
+                                    const SizedBox(height: 3),
+                                    Text('Files shared with connected browsers', style: Theme.of(context).textTheme.bodySmall),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
                         if (files.isEmpty)
                           Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            child: Text('No files selected', style: Theme.of(context).textTheme.bodyMedium),
+                              padding: const EdgeInsets.symmetric(vertical: 24),
+                              child: Center(
+                                child: Text('No files staged. WebDrop can still receive files from a browser.', textAlign: TextAlign.center),
+                              ),
                           )
                         else ...[
-                          const SizedBox(height: 8),
+                            const SizedBox(height: 12),
                           ...files.map(
                             (file) => ListTile(
                               contentPadding: EdgeInsets.zero,
@@ -59,7 +83,7 @@ class WebDropTab extends StatelessWidget {
                           spacing: 8,
                           runSpacing: 8,
                           children: [
-                            OutlinedButton.icon(
+                            FilledButton.icon(
                               onPressed: () async {
                                 final options = FilePickerOption.getOptionsForPlatform();
                                 if (options.length == 1) {
@@ -69,9 +93,9 @@ class WebDropTab extends StatelessWidget {
                                 }
                               },
                               icon: const Icon(Icons.add),
-                              label: const Text('Add/select files'),
+                              label: const Text('+ Add Files'),
                             ),
-                            TextButton.icon(
+                            OutlinedButton.icon(
                               onPressed: files.isEmpty ? null : () => ref.redux(selectedSendingFilesProvider).dispatch(ClearSelectionAction()),
                               icon: const Icon(Icons.delete_outline),
                               label: const Text('Clear staged files'),
@@ -91,10 +115,12 @@ class WebDropTab extends StatelessWidget {
           left: 0,
           right: 0,
           child: Center(
-            child: FilledButton.icon(
-              onPressed: () async => await context.push(() => files.isEmpty ? const WebSharePage() : WebSharePage(files: files)),
-              icon: const Icon(Icons.language),
-              label: const Text('Start WebDrop'),
+            child: AnimatedPress(
+              child: FilledButton.icon(
+                onPressed: () async => await context.push(() => WebSharePage(files: files)),
+                icon: const Icon(Icons.language),
+                label: const Text('Start WebDrop'),
+              ),
             ),
           ),
         ),
@@ -129,55 +155,172 @@ class OsPairsTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        Text('OS Pairs', style: Theme.of(context).textTheme.headlineSmall),
-        const SizedBox(height: 14),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final columns = constraints.maxWidth > 760 ? 3 : constraints.maxWidth > 480 ? 2 : 1;
-            final width = (constraints.maxWidth - (columns - 1) * 12) / columns;
-            return Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: pairs.map((pair) {
-                return SizedBox(
-                  width: width,
-                  child: Card(
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(5),
-                      onTap: () => showDialog<void>(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: Text('${pair.$1.label} to ${pair.$2.label}'),
-                          content: const Text(
-                            'Open OmniDrop on both devices. On the sender, choose files in Transfer and select the receiving device. '
-                            'For browser-based transfers, start WebDrop on one device and open its link on the other.',
-                          ),
-                          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
-                        ),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Row(
-                          children: [
-                            Icon(pair.$1.icon),
-                            const SizedBox(width: 10),
-                            const Icon(Icons.sync_alt),
-                            const SizedBox(width: 10),
-                            Expanded(child: Text('${pair.$1.label} to ${pair.$2.label}')),
-                            const Icon(Icons.chevron_right),
-                          ],
-                        ),
-                      ),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Cross-Platform Pairing Hub', style: Theme.of(context).textTheme.titleLarge),
+                      const SizedBox(height: 6),
+                      const Text('Choose a device pair for direct transfers or browser-based WebDrop.'),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                _PairCountBadge(count: pairs.length),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        ...pairs.indexed.map((entry) {
+          final index = entry.$1;
+          final pair = entry.$2;
+          return Card(
+            margin: const EdgeInsets.only(bottom: 10),
+            child: ExpansionTile(
+              initiallyExpanded: index == 0,
+              tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              leading: _PairNumberBadge(number: index + 1),
+              title: Row(
+                children: [
+                  Icon(pair.$1.icon, size: 21),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.sync_alt, size: 18),
+                  const SizedBox(width: 8),
+                  Icon(pair.$2.icon, size: 21),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text('${pair.$1.label} ↔ ${pair.$2.label}')),
+                ],
+              ),
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: 5),
+                child: Text(_pairDescription(pair)),
+              ),
+              children: [
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _InfoBadge(icon: Icons.speed, label: 'LAN speed'),
+                    _InfoBadge(icon: Icons.lock_outline, label: 'TLS follows device settings'),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Text('HOW TO PAIR & TRANSFER', style: Theme.of(context).textTheme.labelLarge),
+                const SizedBox(height: 8),
+                const _PairStep(number: 1, text: 'Connect both devices to the same local network.'),
+                const _PairStep(number: 2, text: 'Open OmniDrop on both devices. On the sender, choose files in Transfer.'),
+                const _PairStep(number: 3, text: 'Select the receiving device from Nearby devices. Confirm the incoming request if prompted.'),
+                const _PairStep(number: 4, text: 'For browser sharing, start WebDrop and open its displayed link or QR code on the other device.'),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: AnimatedPress(
+                    child: OutlinedButton.icon(
+                      onPressed: () => showReceivePairingDialog(context),
+                      icon: const Icon(Icons.qr_code_scanner),
+                      label: const Text('Open pairing'),
                     ),
                   ),
-                );
-              }).toList(),
-            );
-          },
-        ),
+                ),
+              ],
+            ),
+          );
+        }),
       ],
     );
   }
+}
+
+class _PairCountBadge extends StatelessWidget {
+  final int count;
+
+  const _PairCountBadge({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(color: colors.primary.withValues(alpha: 0.13), borderRadius: BorderRadius.circular(14)),
+      child: Text('$count pairs', style: Theme.of(context).textTheme.labelLarge?.copyWith(color: colors.primary)),
+    );
+  }
+}
+
+class _PairNumberBadge extends StatelessWidget {
+  final int number;
+
+  const _PairNumberBadge({required this.number});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return CircleAvatar(
+      radius: 17,
+      backgroundColor: colors.primary.withValues(alpha: 0.14),
+      child: Text(number.toString().padLeft(2, '0'), style: Theme.of(context).textTheme.labelSmall?.copyWith(color: colors.primary)),
+    );
+  }
+}
+
+class _InfoBadge extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _InfoBadge({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Chip(
+      avatar: Icon(icon, size: 16, color: colors.secondary),
+      label: Text(label),
+      side: BorderSide(color: colors.secondary.withValues(alpha: 0.3)),
+    );
+  }
+}
+
+class _PairStep extends StatelessWidget {
+  final int number;
+  final String text;
+
+  const _PairStep({required this.number, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('$number.', style: TextStyle(color: colors.primary, fontWeight: FontWeight.w700)),
+          const SizedBox(width: 8),
+          Expanded(child: Text(text)),
+        ],
+      ),
+    );
+  }
+}
+
+String _pairDescription((_Platform, _Platform) pair) {
+  final pairPlatforms = {pair.$1, pair.$2};
+  if (pairPlatforms.contains(_Platform.android) && pairPlatforms.contains(_Platform.ios)) {
+    return 'Share directly between phones over local Wi-Fi, or use WebDrop in a browser.';
+  }
+  if (pairPlatforms.any((platform) => platform == _Platform.android || platform == _Platform.ios)) {
+    return 'Move files between mobile and desktop over local Wi-Fi, or use WebDrop in a browser.';
+  }
+  return 'Transfer directly between desktop devices over local Wi-Fi, or use WebDrop in a browser.';
 }
 
 class CloudTab extends StatelessWidget {

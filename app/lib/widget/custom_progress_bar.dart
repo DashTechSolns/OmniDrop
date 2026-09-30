@@ -11,10 +11,15 @@ class CustomProgressBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius),
-      child: LinearProgressIndicator(
-        value: progress,
-        color: color ?? Theme.of(context).colorScheme.primary,
-        minHeight: 10,
+      child: TweenAnimationBuilder<double>(
+        tween: Tween<double>(begin: null, end: progress ?? 0),
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+        builder: (context, animatedProgress, _) => LinearProgressIndicator(
+          value: progress == null ? null : animatedProgress,
+          color: color ?? Theme.of(context).colorScheme.primary,
+          minHeight: 10,
+        ),
       ),
     );
   }

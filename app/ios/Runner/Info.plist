@@ -139,6 +139,8 @@
     <true/>
 
     <!-- Permissions -->
+	<key>NSCameraUsageDescription</key>
+	<string>OmniDrop uses the camera to scan WebDrop pairing QR codes.</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>The app needs photo library access so that the user can select photos to share.</string>
     <key>NSPhotoLibraryAddUsageDescription</key>

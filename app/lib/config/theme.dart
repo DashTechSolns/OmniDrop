@@ -8,7 +8,7 @@ import 'package:localsend_app/util/ui/dynamic_colors.dart';
 import 'package:refena_flutter/refena_flutter.dart';
 import 'package:yaru/yaru.dart' as yaru;
 
-final _borderRadius = BorderRadius.circular(5);
+final _borderRadius = BorderRadius.circular(16);
 const omniDropPrimaryColor = Color(0xFF06B6D4);
 const _brandSecondary = Color(0xFF8B5CF6);
 const _brandAccent = Color(0xFF10B981);
@@ -63,6 +63,18 @@ ThemeData getTheme(ColorMode colorMode, Color customColor, Brightness brightness
       foregroundColor: colorScheme.onSurface,
       surfaceTintColor: Colors.transparent,
     ),
+    cardTheme: CardThemeData(
+      color: colorScheme.surface.withValues(alpha: 0.88),
+      elevation: 3,
+      shadowColor: colorScheme.primary.withValues(alpha: 0.18),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(
+          color: Color.alphaBlend(colorScheme.secondary.withValues(alpha: 0.2), colorScheme.primary.withValues(alpha: 0.22)),
+          width: 0.8,
+        ),
+      ),
+    ),
     navigationBarTheme: colorScheme.brightness == Brightness.dark
         ? NavigationBarThemeData(
             iconTheme: WidgetStateProperty.all(const IconThemeData(color: Colors.white)),
@@ -80,11 +92,19 @@ ThemeData getTheme(ColorMode colorMode, Color customColor, Brightness brightness
       style: ElevatedButton.styleFrom(
         foregroundColor: colorScheme.brightness == Brightness.dark ? Colors.white : null,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
     ),
     fontFamily: fontFamily,
@@ -198,6 +218,15 @@ ThemeData _getYaruTheme(Brightness brightness) {
   return baseTheme.copyWith(
     // same density on all platforms so desktop matches mobile (defaults to compact on desktop)
     visualDensity: VisualDensity.standard,
+    cardTheme: CardThemeData(
+      color: colorScheme.surface.withValues(alpha: 0.9),
+      elevation: 3,
+      shadowColor: colorScheme.primary.withValues(alpha: 0.18),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: colorScheme.primary.withValues(alpha: 0.25), width: 0.8),
+      ),
+    ),
     navigationBarTheme: colorScheme.brightness == Brightness.dark
         ? NavigationBarThemeData(
             iconTheme: WidgetStateProperty.all(const IconThemeData(color: Colors.white)),
@@ -215,11 +244,19 @@ ThemeData _getYaruTheme(Brightness brightness) {
       style: ElevatedButton.styleFrom(
         foregroundColor: colorScheme.brightness == Brightness.dark ? Colors.white : null,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
     ),
   );

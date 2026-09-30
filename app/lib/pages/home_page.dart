@@ -4,21 +4,20 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:localsend_app/config/init.dart';
 import 'package:localsend_app/config/theme.dart';
-import 'package:localsend_app/gen/assets.gen.dart';
 import 'package:localsend_app/gen/strings.g.dart';
 import 'package:localsend_app/pages/home_page_controller.dart';
 import 'package:localsend_app/pages/omnidrop_drawer.dart';
 import 'package:localsend_app/pages/tabs/omnidrop_tabs.dart';
-import 'package:localsend_app/pages/tabs/receive_tab.dart';
 import 'package:localsend_app/pages/tabs/send_tab.dart';
 import 'package:localsend_app/pages/tabs/settings_tab.dart';
-import 'package:localsend_app/model/send_mode.dart';
 import 'package:localsend_app/pages/web_share_page.dart';
-import 'package:localsend_app/provider/settings_provider.dart';
 import 'package:localsend_app/provider/selection/selected_sending_files_provider.dart';
 import 'package:localsend_app/util/native/cross_file_converters.dart';
 import 'package:localsend_app/util/native/file_picker.dart';
 import 'package:localsend_app/widget/dialogs/add_file_dialog.dart';
+import 'package:localsend_app/widget/dialogs/receive_pairing_dialog.dart';
+import 'package:localsend_app/widget/animated_press.dart';
+import 'package:localsend_app/widget/omnidrop_logo.dart';
 import 'package:localsend_app/widget/responsive_builder.dart';
 import 'package:refena_flutter/refena_flutter.dart';
 import 'package:routerino/routerino.dart';
@@ -127,78 +126,65 @@ class _HomePageState extends State<HomePage> with Refena {
             drawer: const OmniDropDrawer(),
             appBar: AppBar(
               automaticallyImplyLeading: false,
+              leading: PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert),
+                onSelected: (value) async {
+                  if (value == 'scan') {
+                    await showReceivePairingDialog(context);
+                  } else if (value == 'share') {
+                    await showModalBottomSheet<void>(
+                      context: context,
+                      builder: (context) => SafeArea(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ListTile(
+                              title: const Text('Nearby devices'),
+                              onTap: () {
+                                Navigator.pop(context);
+                                vm.changeTab(HomeTab.send);
+                              },
+                            ),
+                            ListTile(
+                              title: const Text('WebDrop'),
+                              onTap: () {
+                                Navigator.pop(context);
+                                vm.changeTab(HomeTab.webDrop);
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  } else {
+                    await showDialog<void>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Device migration'),
+                        content: const Text('Device migration - coming soon'),
+                        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
+                      ),
+                    );
+                  }
+                },
+                itemBuilder: (context) => const [
+                  PopupMenuItem(value: 'scan', child: Text('Scan Connect')),
+                  PopupMenuItem(value: 'share', child: Text('Share OmniDrop')),
+                  PopupMenuItem(value: 'migration', child: Text('Copy Phone')),
+                ],
+              ),
               title: Row(
                 children: [
-                  ColorFiltered(
-                    colorFilter: ColorFilter.mode(Theme.of(context).colorScheme.primary, BlendMode.srcATop),
-                    child: Assets.img.logo512.image(width: 32, height: 32),
-                  ),
+                  const OmniDropLogo(size: 32),
                   const SizedBox(width: 8),
                   const Text('OmniDrop'),
-                  IconButton(
-                    tooltip: 'Open menu',
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(width: 32, height: 32),
-                    onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-                    icon: const Icon(Icons.more_vert),
-                  ),
                 ],
               ),
               actions: [
-                PopupMenuButton<String>(
+                IconButton(
+                  tooltip: 'Open navigation drawer',
+                  onPressed: () => _scaffoldKey.currentState?.openDrawer(),
                   icon: const Icon(Icons.menu),
-                  onSelected: (value) async {
-                    if (value == 'scan') {
-                      await showDialog<void>(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('Scan Connect'),
-                          content: const Text('QR scanning is not available on this build.'),
-                          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
-                        ),
-                      );
-                    } else if (value == 'share') {
-                      await showModalBottomSheet<void>(
-                        context: context,
-                        builder: (context) => SafeArea(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              ListTile(
-                                title: const Text('Nearby devices'),
-                                onTap: () {
-                                  Navigator.pop(context);
-                                  vm.changeTab(HomeTab.send);
-                                },
-                              ),
-                              ListTile(
-                                title: const Text('WebDrop'),
-                                onTap: () {
-                                  Navigator.pop(context);
-                                  vm.changeTab(HomeTab.webDrop);
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    } else {
-                      await showDialog<void>(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('Device migration'),
-                          content: const Text('Device migration - coming soon'),
-                          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
-                        ),
-                      );
-                    }
-                  },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(value: 'scan', child: Text('Scan Connect')),
-                    PopupMenuItem(value: 'share', child: Text('Share OmniDrop')),
-                    PopupMenuItem(value: 'migration', child: Text('Copy Phone')),
-                  ],
                 ),
                 IconButton(
                   tooltip: 'Settings',
@@ -222,7 +208,7 @@ class _HomePageState extends State<HomePage> with Refena {
                     backgroundColor: Theme.of(context).cardColorWithElevation,
                     destinations: HomeTab.values.map((tab) {
                       return NavigationRailDestination(
-                        icon: Icon(tab.icon),
+                        icon: tab == HomeTab.send ? const OmniDropLogo(size: 24) : Icon(tab.icon),
                         label: Text(tab.label),
                       );
                     }).toList(),
@@ -289,7 +275,7 @@ class _HomePageState extends State<HomePage> with Refena {
                                   child: FloatingActionButton(
                                     heroTag: 'transfer-tab',
                                     onPressed: () => vm.changeTab(tab),
-                                    child: Icon(tab.icon),
+                                    child: const OmniDropLogo(size: 28),
                                   ),
                                 ),
                               );
@@ -300,7 +286,9 @@ class _HomePageState extends State<HomePage> with Refena {
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Icon(tab.icon, color: selected ? colors.primary : null),
+                                    tab == HomeTab.send
+                                      ? const OmniDropLogo(size: 22)
+                                      : Icon(tab.icon, color: selected ? colors.primary : null),
                                     Text(tab.label, style: Theme.of(context).textTheme.labelSmall),
                                   ],
                                 ),
@@ -327,16 +315,6 @@ class _TransferTab extends StatefulWidget {
 }
 
 class _TransferTabState extends State<_TransferTab> with Refena {
-  bool _showReceive = false;
-
-  Future<void> _showSendOptions() async {
-    setState(() => _showReceive = false);
-    await showDialog<void>(
-      context: context,
-      builder: (_) => _SendOptionsDialog(onCreateQr: _createTemporaryQr),
-    );
-  }
-
   Future<void> _createTemporaryQr() async {
     var files = ref.read(selectedSendingFilesProvider);
     if (files.isEmpty) {
@@ -354,19 +332,21 @@ class _TransferTabState extends State<_TransferTab> with Refena {
       children: [
         Positioned.fill(
           child: Padding(
-            padding: const EdgeInsets.only(top: 68, bottom: 68),
-            child: _showReceive ? const ReceiveTab() : const SendTab(),
+            padding: const EdgeInsets.only(bottom: 68),
+            child: const SendTab(),
           ),
         ),
         Positioned(
-          top: 10,
+          top: 58,
           left: 0,
           right: 0,
           child: Center(
-            child: FilledButton.icon(
-              onPressed: _showSendOptions,
-              icon: const Icon(Icons.send),
-              label: const Text('Send'),
+            child: AnimatedPress(
+              child: FilledButton.icon(
+                onPressed: _createTemporaryQr,
+                icon: const Icon(Icons.send),
+                label: const Text('Send'),
+              ),
             ),
           ),
         ),
@@ -375,74 +355,20 @@ class _TransferTabState extends State<_TransferTab> with Refena {
           left: 0,
           right: 0,
           child: Center(
-            child: FilledButton.tonalIcon(
-              onPressed: () => setState(() => _showReceive = true),
-              style: FilledButton.styleFrom(
-                backgroundColor: colors.secondaryContainer,
-                foregroundColor: colors.onSecondaryContainer,
+            child: AnimatedPress(
+              child: FilledButton.tonalIcon(
+                onPressed: () => showReceivePairingDialog(context),
+                style: FilledButton.styleFrom(
+                  backgroundColor: colors.secondaryContainer,
+                  foregroundColor: colors.onSecondaryContainer,
+                ),
+                icon: const Icon(Icons.download),
+                label: const Text('Receive'),
               ),
-              icon: const Icon(Icons.download),
-              label: const Text('Receive'),
             ),
           ),
         ),
       ],
-    );
-  }
-}
-
-class _SendOptionsDialog extends StatelessWidget {
-  final Future<void> Function() onCreateQr;
-
-  const _SendOptionsDialog({required this.onCreateQr});
-
-  @override
-  Widget build(BuildContext context) {
-    return Consumer(
-      builder: (context, ref) {
-        final settings = ref.watch(settingsProvider);
-        final isLinkMode = settings.sendMode == SendMode.link;
-        return AlertDialog(
-          title: const Text('Send options'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Connection mode: WebDrop link'),
-                  value: isLinkMode,
-                  onChanged: (enabled) async => await ref.notifier(settingsProvider).setSendMode(enabled ? SendMode.link : SendMode.single),
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Multiple recipients'),
-                  value: settings.sendMode == SendMode.multiple,
-                  onChanged: (enabled) async => await ref.notifier(settingsProvider).setSendMode(enabled ? SendMode.multiple : SendMode.single),
-                ),
-                if (isLinkMode)
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Automatically accept browser downloads'),
-                    value: settings.shareViaLinkAutoAccept,
-                    onChanged: (enabled) async => await ref.notifier(settingsProvider).setShareViaLinkAutoAccept(enabled),
-                  ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
-            FilledButton.icon(
-              onPressed: () async {
-                Navigator.pop(context);
-                await onCreateQr();
-              },
-              icon: const Icon(Icons.qr_code_2),
-              label: const Text('Create temporary QR'),
-            ),
-          ],
-        );
-      },
     );
   }
 }
