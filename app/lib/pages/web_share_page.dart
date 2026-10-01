@@ -64,7 +64,7 @@ class _WebSharePageState extends State<WebSharePage> with Refena {
     });
   }
 
-  void _init({required bool encrypted}) async {
+  Future<void> _init({required bool encrypted}) async {
     final settings = ref.read(settingsProvider);
     setState(() {
       _stateEnum = _ServerState.initializing;
@@ -151,13 +151,17 @@ class _WebSharePageState extends State<WebSharePage> with Refena {
     }
     if (!mounted) return;
     setState(() => _stagedFiles = [...ref.read(selectedSendingFilesProvider)]);
-    if (_sendMode) await _init(encrypted: _encrypted);
+    if (_sendMode) {
+      await _init(encrypted: _encrypted);
+    }
   }
 
   Future<void> _clearStagedFiles() async {
     ref.redux(selectedSendingFilesProvider).dispatch(ClearSelectionAction());
     setState(() => _stagedFiles = []);
-    if (_sendMode) await _init(encrypted: _encrypted);
+    if (_sendMode) {
+      await _init(encrypted: _encrypted);
+    }
   }
 
   @override
