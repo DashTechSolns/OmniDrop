@@ -3,6 +3,7 @@ package com.omnidrop.app
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.ContentResolver
+import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -11,11 +12,14 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.DocumentsContract
+import android.provider.MediaStore
 import android.provider.Settings
+import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -27,6 +31,7 @@ private const val REQUEST_CODE_PICK_DIRECTORY = 1
 private const val REQUEST_CODE_PICK_DIRECTORY_PATH = 2
 private const val REQUEST_CODE_PICK_FILE = 3
 private const val REQUEST_CODE_LOCAL_NETWORK = 4
+private const val REQUEST_CODE_PICK_FOLDER_TREE = 5
 
 // Not available as a constant in compileSdk 36.
 private const val PERMISSION_ACCESS_LOCAL_NETWORK = "android.permission.ACCESS_LOCAL_NETWORK"
@@ -95,6 +100,23 @@ class MainActivity : FlutterActivity() {
                     openDirectoryPicker(onlyPath = true)
                 }
 
+                "pickFolderTree" -> {
+                    pendingResult = result
+                    openFolderTreePicker()
+                }
+
+                "listFolderTree" -> {
+                    val uri = call.argument<String>("uri")
+                    if (uri == null) result.error("INVALID_ARGUMENT", "Missing folder URI", null)
+                    else result.success(listTreeEntries(Uri.parse(uri)))
+                }
+
+                "listFolderTreeFiles" -> {
+                    val uri = call.argument<String>("uri")
+                    if (uri == null) result.error("INVALID_ARGUMENT", "Missing folder URI", null)
+                    else result.success(listTreeFiles(Uri.parse(uri), ""))
+                }
+
                 "createDirectory" -> handleCreateDirectory(call, result)
 
                 "getFileDescriptor" -> handleGetFileDescriptor(call, result)
@@ -113,6 +135,30 @@ class MainActivity : FlutterActivity() {
                     result.success(null)
                 }
 
+                "openWifiSettings" -> {
+                    startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
+                    result.success(null)
+                }
+
+                "openAppNotificationSettings" -> {
+                    val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                    startActivity(intent)
+                    result.success(null)
+                }
+
+                "openAppPermissionsSettings" -> {
+                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).setData(Uri.fromParts("package", packageName, null))
+                    startActivity(intent)
+                    result.success(null)
+                }
+
+                "shareInstalledApk" -> result.success(shareInstalledApk())
+
+                "shareTextInvite" -> {
+                    shareTextInvite()
+                    result.success(null)
+                }
+
                 "shareIntentReady" -> {
                     onShareIntentReady()
                     result.success(null)
@@ -126,6 +172,8 @@ class MainActivity : FlutterActivity() {
                     result.success(getDownloadsDirectory())
                 }
 
+                "queryMediaFiles" -> result.success(queryMediaFiles(call.argument<String>("category") ?: "downloads"))
+
                 "requestLocalNetworkPermission" -> {
                     if (hasLocalNetworkPermission()) {
                         result.success(true)
@@ -138,6 +186,34 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+    }
+
+    private fun shareInstalledApk(): Boolean {
+        return try {
+            val apk = File(applicationInfo.sourceDir)
+            if (!apk.canRead()) return false
+            val sharedApk = File(cacheDir, "share/OmniDrop.apk")
+            sharedApk.parentFile?.mkdirs()
+            apk.copyTo(sharedApk, overwrite = true)
+            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", sharedApk)
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/vnd.android.package-archive"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(intent, "Share OmniDrop"))
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun shareTextInvite() {
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, "Install OmniDrop for private local file sharing: https://omnidrop.app")
+        }
+        startActivity(Intent.createChooser(intent, "Share OmniDrop"))
     }
 
     /// Android 17+ gates local network access behind a runtime permission; older versions grant it implicitly.
@@ -160,6 +236,67 @@ class MainActivity : FlutterActivity() {
     @Suppress("DEPRECATION")
     private fun getDownloadsDirectory(): String {
         return Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath
+    }
+
+    private fun queryMediaFiles(category: String): List<Map<String, Any?>> {
+        val documents = category == "documents"
+        val collection = MediaStore.Files.getContentUri("external")
+        val projection = arrayOf(
+            MediaStore.MediaColumns._ID,
+            MediaStore.MediaColumns.DISPLAY_NAME,
+            MediaStore.MediaColumns.SIZE,
+            MediaStore.MediaColumns.DATE_MODIFIED,
+            MediaStore.MediaColumns.MIME_TYPE,
+        )
+        val supportedMimeTypes = arrayOf(
+            "application/pdf",
+            "application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.ms-excel",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "application/vnd.ms-powerpoint",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "text/plain",
+            "text/csv",
+            "application/epub+zip",
+            "application/zip",
+        )
+        val selection = if (documents) {
+            "${MediaStore.MediaColumns.MIME_TYPE} IN (${supportedMimeTypes.joinToString(",") { "?" }})"
+        } else {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?"
+            } else {
+                "${MediaStore.MediaColumns.DATA} LIKE ?"
+            }
+        }
+        val selectionArgs = if (documents) {
+            supportedMimeTypes
+        } else {
+            arrayOf(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) "Download/%" else "${getDownloadsDirectory()}%")
+        }
+        val sortOrder = "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
+        val files = mutableListOf<Map<String, Any?>>()
+        val cursor = contentResolver.query(collection, projection, selection, selectionArgs, sortOrder) ?: return files
+        cursor.use {
+            val idColumn = it.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+            val nameColumn = it.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
+            val sizeColumn = it.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
+            val modifiedColumn = it.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_MODIFIED)
+            while (it.moveToNext()) {
+                val id = it.getLong(idColumn)
+                val modified = it.getLong(modifiedColumn)
+                files.add(
+                    FileInfo(
+                        name = it.getString(nameColumn) ?: "",
+                        size = it.getLong(sizeColumn).coerceAtLeast(0),
+                        uri = ContentUris.withAppendedId(collection, id).toString(),
+                        lastModified = if (modified > 0) Date(modified * 1000).toRfc3339() else null,
+                    ).toMap(),
+                )
+            }
+        }
+        return files
     }
 
     private fun isAnimationsEnabled() : Boolean {
@@ -307,6 +444,13 @@ class MainActivity : FlutterActivity() {
         )
     }
 
+    private fun openFolderTreePicker() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+        }
+        startActivityForResult(intent, REQUEST_CODE_PICK_FOLDER_TREE)
+    }
+
     private fun openFilePicker() {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
@@ -323,7 +467,11 @@ class MainActivity : FlutterActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (resultCode == Activity.RESULT_CANCELED) {
-            pendingResult?.error("CANCELED", "Canceled", null)
+            if (requestCode == REQUEST_CODE_PICK_FOLDER_TREE) {
+                pendingResult?.success(null)
+            } else {
+                pendingResult?.error("CANCELED", "Canceled", null)
+            }
             pendingResult = null
             return
         }
@@ -365,6 +513,18 @@ class MainActivity : FlutterActivity() {
                     pendingResult?.error("Error", "Failed to access directory", null)
                     pendingResult = null
                 }
+            }
+
+            REQUEST_CODE_PICK_FOLDER_TREE -> {
+                val uri = data.data
+                val takeFlags = data.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                if (uri != null) {
+                    contentResolver.takePersistableUriPermission(uri, takeFlags)
+                    pendingResult?.success(uri.toString())
+                } else {
+                    pendingResult?.error("Error", "Failed to access folder", null)
+                }
+                pendingResult = null
             }
 
             REQUEST_CODE_PICK_FILE -> {
@@ -430,6 +590,38 @@ class MainActivity : FlutterActivity() {
                 )
             }
         }
+    }
+
+    private fun listTreeEntries(uri: Uri): List<Map<String, Any?>> {
+        return FastDocumentFile.fromTreeUri(this, uri).listFiles().map { entry ->
+            mapOf(
+                "name" to entry.name,
+                "size" to entry.size.coerceAtLeast(0L),
+                "uri" to entry.uri.toString(),
+                "lastModified" to entry.lastModified?.toRfc3339(),
+                "isDirectory" to entry.isDirectory,
+            )
+        }
+    }
+
+    private fun listTreeFiles(uri: Uri, parentPath: String): List<Map<String, Any?>> {
+        val files = mutableListOf<Map<String, Any?>>()
+        for (entry in FastDocumentFile.fromTreeUri(this, uri).listFiles()) {
+            val relativePath = if (parentPath.isEmpty()) entry.name else "$parentPath/${entry.name}"
+            if (entry.isDirectory) {
+                files.addAll(listTreeFiles(entry.uri, relativePath))
+            } else if (entry.isFile) {
+                files.add(
+                    FileInfo(
+                        name = relativePath,
+                        size = entry.size.coerceAtLeast(0L),
+                        uri = entry.uri.toString(),
+                        lastModified = entry.lastModified?.toRfc3339(),
+                    ).toMap(),
+                )
+            }
+        }
+        return files
     }
 
     @SuppressLint("WrongConstant")

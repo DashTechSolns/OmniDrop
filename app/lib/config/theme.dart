@@ -13,6 +13,19 @@ const omniDropPrimaryColor = Color(0xFF06B6D4);
 const _brandSecondary = Color(0xFF8B5CF6);
 const _brandAccent = Color(0xFF10B981);
 const _darkBackground = Color(0xFF090D16);
+const glassBackground = Color(0xFF05080D);
+const glassCyan = Color(0xFF00D9FF);
+const glassCyanBright = Color(0xFF06B6D4);
+const glassViolet = Color(0xFF8B5CF6);
+const glassGreen = Color(0xFF10B981);
+const glassRadiusSmall = 8.0;
+const glassRadiusButton = 12.0;
+const glassRadiusInput = 16.0;
+const glassRadiusCard = 20.0;
+const glassRadiusMajor = 24.0;
+const glassRadiusHero = 28.0;
+const glassRadiusModal = 32.0;
+const glassRadiusPill = 999.0;
 
 ThemeData getTheme(ColorMode colorMode, Color customColor, Brightness brightness, DynamicColors? dynamicColors) {
   if (colorMode == ColorMode.yaru) {
@@ -55,12 +68,18 @@ ThemeData getTheme(ColorMode colorMode, Color customColor, Brightness brightness
 
   return ThemeData(
     colorScheme: colorScheme,
+    scaffoldBackgroundColor: brightness == Brightness.dark ? glassBackground : const Color(0xFFEFF6FA),
     useMaterial3: true,
     // same density on all platforms so desktop matches mobile (defaults to compact on desktop)
     visualDensity: VisualDensity.standard,
     appBarTheme: AppBarTheme(
       backgroundColor: Color.alphaBlend(colorScheme.primary.withValues(alpha: 0.12), colorScheme.surface),
       foregroundColor: colorScheme.onSurface,
+      surfaceTintColor: Colors.transparent,
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: colorScheme.surface.withValues(alpha: brightness == Brightness.dark ? 0.96 : 0.94),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(glassRadiusModal)),
       surfaceTintColor: Colors.transparent,
     ),
     cardTheme: CardThemeData(

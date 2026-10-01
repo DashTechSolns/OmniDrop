@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:localsend_app/config/theme.dart';
 import 'package:localsend_app/pages/web_share_page.dart';
 import 'package:localsend_app/widget/animated_press.dart';
 import 'package:localsend_app/widget/dialogs/receive_pairing_dialog.dart';
@@ -8,6 +9,7 @@ import 'package:localsend_app/provider/selection/selected_sending_files_provider
 import 'package:localsend_app/provider/settings_provider.dart';
 import 'package:localsend_app/util/native/file_picker.dart';
 import 'package:localsend_app/widget/dialogs/add_file_dialog.dart';
+import 'package:localsend_app/widget/glass/glass_card.dart';
 import 'package:localsend_isolates/util/file_size_helper.dart';
 import 'package:refena_flutter/refena_flutter.dart';
 import 'package:routerino/routerino.dart';
@@ -28,7 +30,9 @@ class WebDropTab extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
-                Card(
+                GlassCard(
+                  margin: EdgeInsets.zero,
+                  padding: EdgeInsets.zero,
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
@@ -155,7 +159,9 @@ class OsPairsTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        Card(
+        GlassCard(
+          margin: EdgeInsets.zero,
+          padding: EdgeInsets.zero,
           child: Padding(
             padding: const EdgeInsets.all(18),
             child: Row(
@@ -180,8 +186,9 @@ class OsPairsTab extends StatelessWidget {
         ...pairs.indexed.map((entry) {
           final index = entry.$1;
           final pair = entry.$2;
-          return Card(
+          return GlassCard(
             margin: const EdgeInsets.only(bottom: 10),
+            padding: EdgeInsets.zero,
             child: ExpansionTile(
               initiallyExpanded: index == 0,
               tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
@@ -323,13 +330,6 @@ String _pairDescription((_Platform, _Platform) pair) {
   return 'Transfer directly between desktop devices over local Wi-Fi, or use WebDrop in a browser.';
 }
 
-class CloudTab extends StatelessWidget {
-  const CloudTab({super.key});
-
-  @override
-  Widget build(BuildContext context) => const Center(child: Text('Cloud transfer - coming soon'));
-}
-
 const _profileAvatars = [Icons.person, Icons.face, Icons.account_circle, Icons.pets, Icons.rocket_launch, Icons.bolt];
 
 class MeTab extends StatefulWidget {
@@ -416,9 +416,10 @@ class _ProfileMetric extends StatelessWidget {
   const _ProfileMetric({required this.label, required this.value});
 
   @override
-  Widget build(BuildContext context) => Card(
+  Widget build(BuildContext context) => GlassCard(
     margin: const EdgeInsets.only(right: 10),
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+    padding: EdgeInsets.zero,
+    radius: glassRadiusCard,
     child: SizedBox(
       width: 175,
       child: Padding(

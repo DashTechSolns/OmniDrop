@@ -6,6 +6,7 @@ import 'package:localsend_app/pages/language_page.dart';
 import 'package:localsend_app/provider/persistence_provider.dart';
 import 'package:localsend_app/provider/settings_provider.dart';
 import 'package:localsend_app/widget/dialogs/custom_color_dialog.dart';
+import 'package:localsend_app/widget/glass/glass_card.dart';
 import 'package:refena_flutter/refena_flutter.dart';
 import 'package:routerino/routerino.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -79,8 +80,14 @@ class _OmniDropDrawerState extends State<OmniDropDrawer> with Refena {
   Widget build(BuildContext context) {
     final settings = context.watch(settingsProvider);
     return Drawer(
-      child: SafeArea(
-        child: ListView(
+      backgroundColor: Colors.transparent,
+      child: GlassCard(
+        margin: EdgeInsets.zero,
+        padding: EdgeInsets.zero,
+        radius: 0,
+        blur: true,
+        child: SafeArea(
+          child: ListView(
           children: [
             const DrawerHeader(
               child: Align(
@@ -136,6 +143,7 @@ class _OmniDropDrawerState extends State<OmniDropDrawer> with Refena {
               onTap: () async => await context.push(() => const AboutPage()),
             ),
           ],
+          ),
         ),
       ),
     );

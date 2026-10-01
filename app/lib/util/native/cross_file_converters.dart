@@ -18,7 +18,11 @@ class CrossFileConverters {
     final metadata = await readFileMetadata(path: file.path);
     return CrossFile(
       name: await asset.titleAsync,
-      fileType: asset.type == AssetType.video ? FileType.video : FileType.image,
+      fileType: switch (asset.type) {
+        AssetType.video => FileType.video,
+        AssetType.audio => FileType.audio,
+        _ => FileType.image,
+      },
       size: await file.length(),
       thumbnail: null,
       asset: asset,

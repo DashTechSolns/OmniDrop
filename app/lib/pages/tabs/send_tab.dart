@@ -5,6 +5,7 @@ import 'package:localsend_app/gen/strings.g.dart';
 import 'package:localsend_app/model/send_mode.dart';
 import 'package:localsend_app/pages/device_details_page.dart';
 import 'package:localsend_app/pages/selected_files_page.dart';
+import 'package:localsend_app/pages/tabs/in_app_file_browser.dart';
 import 'package:localsend_app/pages/tabs/send_tab_vm.dart';
 import 'package:localsend_app/pages/troubleshoot_page.dart';
 import 'package:localsend_app/provider/animation_provider.dart';
@@ -43,65 +44,7 @@ class SendTab extends StatelessWidget {
     return ViewModelBuilder(
       provider: (ref) => sendTabVmProvider,
       init: (context) async => context.global.dispatchAsync(SendTabInitAction(context)), // ignore: discarded_futures
-      builder: (context, _) {
-        final ref = context.ref;
-        final colors = Theme.of(context).colorScheme;
-        return Column(
-          children: [
-            SizedBox(
-              height: 54,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: _horizontalPadding),
-                children: pickerOptions.map((option) {
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ActionChip(
-                      avatar: Icon(option.icon, size: 18),
-                      label: Text(option.label),
-                      backgroundColor: colors.primaryContainer,
-                      onPressed: () async => ref.global.dispatchAsync(PickFileAction(option: option, context: context)),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-            Expanded(
-              child: Card(
-                margin: const EdgeInsets.only(top: 8, bottom: 10, left: _horizontalPadding, right: _horizontalPadding),
-                color: Colors.transparent,
-                elevation: 0,
-                surfaceTintColor: Colors.transparent,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(5),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 28),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.folder_open_outlined, size: 42, color: colors.secondary),
-                          const SizedBox(height: 12),
-                          Text('In-app file browser coming soon', style: Theme.of(context).textTheme.titleMedium),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Choose a file type above to add items to your selection.',
-                            textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
+      builder: (context, _) => const InAppFileBrowser(),
     );
   }
 }

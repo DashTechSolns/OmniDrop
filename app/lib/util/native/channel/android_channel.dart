@@ -39,6 +39,23 @@ Future<List<FileInfo>?> pickFilesAndroid() async {
   return result.map((e) => FileInfoMapper.fromJson((e as Map).cast<String, dynamic>())).toList();
 }
 
+Future<List<FileInfo>> queryMediaFilesAndroid({required String category}) async {
+  final result = await _methodChannel.invokeMethod<List>('queryMediaFiles', {'category': category});
+  return (result ?? []).map((file) => FileInfoMapper.fromJson((file as Map).cast<String, dynamic>())).toList();
+}
+
+Future<String?> pickFolderTreeAndroid() => _methodChannel.invokeMethod<String>('pickFolderTree');
+
+Future<List<AndroidBrowseEntry>> listFolderTreeAndroid({required String uri}) async {
+  final result = await _methodChannel.invokeMethod<List>('listFolderTree', {'uri': uri});
+  return (result ?? []).map((entry) => AndroidBrowseEntry.fromMap((entry as Map).cast<String, dynamic>())).toList();
+}
+
+Future<List<FileInfo>> listFolderTreeFilesAndroid({required String uri}) async {
+  final result = await _methodChannel.invokeMethod<List>('listFolderTreeFiles', {'uri': uri});
+  return (result ?? []).map((file) => FileInfoMapper.fromJson((file as Map).cast<String, dynamic>())).toList();
+}
+
 /// Returns the global "Download" directory, e.g. /storage/emulated/0/Download.
 Future<String?> getDownloadsDirectoryAndroid() async {
   try {
@@ -88,6 +105,31 @@ Future<void> openGallery() async {
   await _methodChannel.invokeMethod('openGallery');
 }
 
+Future<bool> shareInstalledApkAndroid() async {
+  try {
+    return await _methodChannel.invokeMethod<bool>('shareInstalledApk') ?? false;
+  } catch (e) {
+    _logger.warning('Could not share installed APK', e);
+    return false;
+  }
+}
+
+Future<void> shareTextInviteAndroid() async {
+  await _methodChannel.invokeMethod<void>('shareTextInvite');
+}
+
+Future<void> openWifiSettingsAndroid() async {
+  await _methodChannel.invokeMethod<void>('openWifiSettings');
+}
+
+Future<void> openAppNotificationSettingsAndroid() async {
+  await _methodChannel.invokeMethod<void>('openAppNotificationSettings');
+}
+
+Future<void> openAppPermissionsSettingsAndroid() async {
+  await _methodChannel.invokeMethod<void>('openAppPermissionsSettings');
+}
+
 @MappableClass()
 class PickDirectoryResult with PickDirectoryResultMappable {
   final String directoryUri;
@@ -114,4 +156,28 @@ class FileInfo with FileInfoMappable {
     required this.uri,
     required this.lastModified,
   });
+}
+
+class AndroidBrowseEntry {
+  final String name;
+  final int size;
+  final String uri;
+  final String? lastModified;
+  final bool isDirectory;
+
+  const AndroidBrowseEntry({
+    required this.name,
+    required this.size,
+    required this.uri,
+    required this.lastModified,
+    required this.isDirectory,
+  });
+
+  factory AndroidBrowseEntry.fromMap(Map<String, dynamic> map) => AndroidBrowseEntry(
+    name: map['name'] as String? ?? '',
+    size: map['size'] as int? ?? 0,
+    uri: map['uri'] as String? ?? '',
+    lastModified: map['lastModified'] as String?,
+    isDirectory: map['isDirectory'] as bool? ?? false,
+  );
 }

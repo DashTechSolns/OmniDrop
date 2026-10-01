@@ -21,6 +21,7 @@ import 'package:localsend_app/widget/custom_progress_bar.dart';
 import 'package:localsend_app/widget/dialogs/cancel_session_dialog.dart';
 import 'package:localsend_app/widget/dialogs/error_dialog.dart';
 import 'package:localsend_app/widget/file_thumbnail.dart';
+import 'package:localsend_app/widget/glass/glass_card.dart';
 import 'package:localsend_isolates/model/dto/file_dto.dart';
 import 'package:localsend_isolates/model/file_status.dart';
 import 'package:localsend_isolates/model/session_status.dart';
@@ -194,7 +195,7 @@ class _ProgressPageState extends State<ProgressPage> with Refena {
   @override
   Widget build(BuildContext context) {
     final transferNotifier = ref.watch(fileTransferProvider);
-    final currBytes = _files.fold<int>(
+    final currBytes = _files.where((file) => _selectedFiles.contains(file.id)).fold<int>(
       0,
       (prev, curr) => prev + ((transferNotifier.getProgress(sessionId: widget.sessionId, fileId: curr.id) * curr.size).round()),
     );
@@ -252,6 +253,9 @@ class _ProgressPageState extends State<ProgressPage> with Refena {
     }
 
     final finishedCount = transferNotifier.getStatuses(widget.sessionId).where((s) => s == FileStatus.finished).length;
+    final filesRemaining = (_selectedFiles.length - finishedCount).clamp(0, _selectedFiles.length);
+    final otherDeviceName = receiveSession?.senderAlias ?? sendSession?.target.alias ?? '';
+    final percentage = _totalBytes <= 0 ? 0 : (currBytes / _totalBytes * 100).clamp(0, 100).round();
 
     return PopScope(
       onPopInvokedWithResult: (didPop, result) {
@@ -464,7 +468,10 @@ class _ProgressPageState extends State<ProgressPage> with Refena {
                 alignment: Alignment.bottomCenter,
                 child: Padding(
                   padding: const EdgeInsets.only(left: 10, right: 10, bottom: 10),
-                  child: Card(
+                  child: ElevatedGlass(
+                    margin: EdgeInsets.zero,
+                    padding: EdgeInsets.zero,
+                    radius: glassRadiusModal,
                     child: Padding(
                       padding: const EdgeInsets.only(left: 15, right: 15, bottom: 5, top: 10),
                       child: Column(
@@ -476,6 +483,13 @@ class _ProgressPageState extends State<ProgressPage> with Refena {
                               remainingTime: _remainingTime ?? '-',
                             ),
                             style: const TextStyle(fontSize: 20),
+                          ),
+                          if (otherDeviceName.isNotEmpty)
+                            Text(otherDeviceName, style: Theme.of(context).textTheme.bodySmall),
+                          Text('$percentage% · ${currBytes.asReadableFileSize} / ${_totalBytes.asReadableFileSize}'),
+                          Text(
+                            '${speedInBytes == null ? 'Speed unavailable' : speedInBytes.asReadableFileSize} · $filesRemaining files remaining · ETA ${_remainingTime ?? '-'}',
+                            style: Theme.of(context).textTheme.bodySmall,
                           ),
                           const SizedBox(height: 5),
                           TweenAnimationBuilder(
@@ -511,6 +525,7 @@ class _ProgressPageState extends State<ProgressPage> with Refena {
                                       n: _totalBytes == double.maxFinite.toInt() ? '-' : _totalBytes.asReadableFileSize,
                                     ),
                                   ),
+                                  Text('Files remaining: $filesRemaining'),
                                   if (speedInBytes != null)
                                     Text(
                                       t.progressPage.total.speed(

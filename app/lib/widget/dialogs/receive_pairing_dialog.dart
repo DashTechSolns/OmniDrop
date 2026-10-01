@@ -1,23 +1,22 @@
 import 'dart:async';
 
-import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:localsend_app/model/send_mode.dart';
-import 'package:localsend_app/pages/tabs/send_tab_vm.dart';
-import 'package:localsend_app/widget/list_tile/device_list_tile.dart';
+import 'package:localsend_app/util/qr_payload_parser.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import 'package:refena_flutter/refena_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-Future<void> showReceivePairingDialog(BuildContext context) async {
-  await showDialog<void>(context: context, builder: (_) => _ReceivePairingDialog(parentContext: context));
+Future<void> showReceivePairingDialog(BuildContext context, {bool allowWebDropLinks = false}) async {
+  await showDialog<void>(
+    context: context,
+    builder: (_) => _ReceivePairingDialog(allowWebDropLinks: allowWebDropLinks),
+  );
 }
 
 class _ReceivePairingDialog extends StatefulWidget {
-  final BuildContext parentContext;
+  final bool allowWebDropLinks;
 
-  const _ReceivePairingDialog({required this.parentContext});
+  const _ReceivePairingDialog({required this.allowWebDropLinks});
 
   @override
   State<_ReceivePairingDialog> createState() => _ReceivePairingDialogState();
@@ -39,15 +38,36 @@ class _ReceivePairingDialogState extends State<_ReceivePairingDialog> with Singl
     final value = capture.barcodes.map((barcode) => barcode.rawValue).whereType<String>().firstOrNull;
     if (value == null) return;
 
-    final uri = Uri.tryParse(value);
-    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https') || uri.host.isEmpty) {
-      setState(() => _scanMessage = 'That QR code is not a WebDrop link.');
+    final parsed = parseQrPayload(value);
+    if (parsed case ParsedPairQr()) {
+      _handledCode = true;
+      setState(() => _scanMessage = 'This OmniDrop pairing code cannot be joined while no sender session is active.');
       return;
     }
-
-    _handledCode = true;
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (mounted) Navigator.of(context).pop();
+    if (parsed case ParsedWebDropQr(:final uri)) {
+      if (!widget.allowWebDropLinks) {
+        setState(() => _scanMessage = 'Not an OmniDrop code.');
+        return;
+      }
+      final openLink = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Open this link in browser?'),
+          content: Text(uri.toString(), maxLines: 2, overflow: TextOverflow.ellipsis),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Open')),
+          ],
+        ),
+      );
+      if (openLink == true) {
+        _handledCode = true;
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        if (mounted) Navigator.of(context).pop();
+      }
+      return;
+    }
+    setState(() => _scanMessage = 'Not an OmniDrop code.');
   }
 
   @override
@@ -62,7 +82,10 @@ class _ReceivePairingDialogState extends State<_ReceivePairingDialog> with Singl
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Scan a WebDrop QR code to open its transfer page.', style: Theme.of(context).textTheme.bodyMedium),
+              Text(
+                widget.allowWebDropLinks ? 'Scan an OmniDrop code or WebDrop link.' : 'Scan an OmniDrop pairing code.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
               const SizedBox(height: 14),
               if (cameraUnavailable)
                 Container(
@@ -116,80 +139,6 @@ class _ReceivePairingDialogState extends State<_ReceivePairingDialog> with Singl
                 const SizedBox(height: 8),
                 Text(_scanMessage!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
               ],
-              const SizedBox(height: 12),
-              Consumer(
-                builder: (context, ref) {
-                  final vm = ref.watch(sendTabVmProvider);
-                  return ExpansionTile(
-                    tilePadding: EdgeInsets.zero,
-                    childrenPadding: EdgeInsets.zero,
-                    title: const Text('Nearby devices'),
-                    subtitle: Text('${vm.nearbyDevices.length} found'),
-                    children: [
-                      Wrap(
-                        spacing: 4,
-                        children: [
-                          Tooltip(
-                            message: 'Send to an address',
-                            child: IconButton(
-                              onPressed: () async {
-                                Navigator.of(context).pop();
-                                await vm.onTapAddress(widget.parentContext);
-                              },
-                              icon: const Icon(Icons.ads_click),
-                            ),
-                          ),
-                          Tooltip(
-                            message: 'Send to a favorite',
-                            child: IconButton(
-                              onPressed: () async {
-                                Navigator.of(context).pop();
-                                await vm.onTapFavorite(widget.parentContext);
-                              },
-                              icon: const Icon(Icons.favorite_outline),
-                            ),
-                          ),
-                          PopupMenuButton<SendMode>(
-                            tooltip: 'Send mode',
-                            onSelected: (mode) async {
-                              Navigator.of(context).pop();
-                              await vm.onTapSendMode(widget.parentContext, mode);
-                            },
-                            itemBuilder: (context) => const [
-                              PopupMenuItem(value: SendMode.single, child: Text('Single recipient')),
-                              PopupMenuItem(value: SendMode.multiple, child: Text('Multiple recipients')),
-                              PopupMenuItem(value: SendMode.link, child: Text('WebDrop link')),
-                            ],
-                            child: const Padding(
-                              padding: EdgeInsets.all(12),
-                              child: Icon(Icons.settings_outlined),
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (vm.nearbyDevices.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.only(bottom: 12),
-                          child: Align(alignment: Alignment.centerLeft, child: Text('No nearby devices found yet.')),
-                        )
-                      else
-                        ...vm.nearbyDevices.map((device) {
-                          return DeviceListTile(
-                            device: device,
-                            onTap: () async {
-                              Navigator.of(context).pop();
-                              if (vm.sendMode == SendMode.multiple) {
-                                await vm.onTapDeviceMultiSend(widget.parentContext, device);
-                              } else {
-                                await vm.onTapDevice(widget.parentContext, device);
-                              }
-                            },
-                          );
-                        }),
-                    ],
-                  );
-                },
-              ),
             ],
           ),
         ),

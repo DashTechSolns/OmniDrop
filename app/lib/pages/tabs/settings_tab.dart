@@ -8,6 +8,7 @@ import 'package:localsend_app/pages/about/about_page.dart';
 import 'package:localsend_app/pages/changelog_page.dart';
 import 'package:localsend_app/pages/donation/donation_page.dart';
 import 'package:localsend_app/pages/settings/network_interfaces_page.dart';
+import 'package:localsend_app/util/native/channel/android_channel.dart' as android_channel;
 import 'package:localsend_app/pages/tabs/settings_tab_controller.dart';
 import 'package:localsend_app/provider/network/server/server_provider.dart';
 import 'package:localsend_app/provider/settings_provider.dart';
@@ -20,6 +21,7 @@ import 'package:localsend_app/util/native/pick_directory_path.dart';
 import 'package:localsend_app/util/native/platform_check.dart';
 import 'package:localsend_app/widget/custom_dropdown_button.dart';
 import 'package:localsend_app/widget/dialogs/encryption_disabled_notice.dart';
+import 'package:localsend_app/widget/dialogs/favorite_dialog.dart';
 import 'package:localsend_app/widget/dialogs/pin_dialog.dart';
 import 'package:localsend_app/widget/dialogs/quick_save_from_favorites_notice.dart';
 import 'package:localsend_app/widget/dialogs/quick_save_notice.dart';
@@ -27,6 +29,7 @@ import 'package:localsend_app/widget/dialogs/text_field_tv.dart';
 import 'package:localsend_app/widget/dialogs/text_field_with_actions.dart';
 import 'package:localsend_app/widget/labeled_checkbox.dart';
 import 'package:localsend_app/widget/local_send_logo.dart';
+import 'package:localsend_app/widget/glass/glass_card.dart';
 import 'package:localsend_app/widget/responsive_list_view.dart';
 import 'package:localsend_isolates/constants.dart';
 import 'package:localsend_isolates/model/device.dart';
@@ -102,8 +105,20 @@ class SettingsTab extends StatelessWidget {
                   ],
                 ],
             _SettingsSection(
-              title: t.settingsTab.receive.title,
+              title: 'GENERAL',
               children: [
+                if (defaultTargetPlatform == TargetPlatform.android) ...[
+                  _ButtonEntry(
+                    label: 'Notifications',
+                    buttonLabel: 'Open',
+                    onTap: () async => android_channel.openAppNotificationSettingsAndroid(),
+                  ),
+                  _ButtonEntry(
+                    label: 'Permissions',
+                    buttonLabel: 'Open',
+                    onTap: () async => android_channel.openAppPermissionsSettingsAndroid(),
+                  ),
+                ],
                 _BooleanEntry(
                   label: t.settingsTab.receive.quickSave,
                   value: vm.settings.quickSave,
@@ -208,22 +223,21 @@ class SettingsTab extends StatelessWidget {
                 ),
               ],
             ),
-            if (vm.advanced)
-              _SettingsSection(
-                title: t.settingsTab.send.title,
-                children: [
-                  _BooleanEntry(
-                    label: t.settingsTab.send.shareViaLinkAutoAccept,
-                    value: vm.settings.shareViaLinkAutoAccept,
-                    onChanged: (b) async {
-                      await ref.notifier(settingsProvider).setShareViaLinkAutoAccept(b);
-                    },
-                  ),
-                ],
-              ),
             _SettingsSection(
-              title: t.settingsTab.network.title,
+              title: 'CONNECTION',
               children: [
+                if (defaultTargetPlatform == TargetPlatform.android)
+                  _ButtonEntry(
+                    label: 'Wi-Fi',
+                    buttonLabel: 'Open settings',
+                    onTap: () async => android_channel.openWifiSettingsAndroid(),
+                  ),
+                if (vm.advanced)
+                  _BooleanEntry(
+                    label: 'WebDrop auto-accept',
+                    value: vm.settings.shareViaLinkAutoAccept,
+                    onChanged: (b) async => ref.notifier(settingsProvider).setShareViaLinkAutoAccept(b),
+                  ),
                 AnimatedCrossFade(
                   crossFadeState:
                       vm.serverState != null &&
@@ -394,18 +408,6 @@ class SettingsTab extends StatelessWidget {
                     ),
                   ),
                 if (vm.advanced)
-                  _BooleanEntry(
-                    label: t.settingsTab.network.encryption,
-                    value: vm.settings.https,
-                    onChanged: (b) async {
-                      final old = vm.settings.https;
-                      await ref.notifier(settingsProvider).setHttps(b);
-                      if (old && !b && context.mounted) {
-                        await EncryptionDisabledNotice.open(context);
-                      }
-                    },
-                  ),
-                if (vm.advanced)
                   _SettingsEntry(
                     label: t.settingsTab.network.multicastGroup,
                     child: TextFieldTv(
@@ -445,7 +447,31 @@ class SettingsTab extends StatelessWidget {
               ],
             ),
             _SettingsSection(
-              title: t.settingsTab.other.title,
+              title: 'SECURITY',
+              security: true,
+              children: [
+                _BooleanEntry(
+                  label: 'Encryption',
+                  value: vm.settings.https,
+                  onChanged: (b) async {
+                    final old = vm.settings.https;
+                    await ref.notifier(settingsProvider).setHttps(b);
+                    if (old && !b && context.mounted) {
+                      await EncryptionDisabledNotice.open(context);
+                    }
+                  },
+                ),
+                _ButtonEntry(
+                  label: 'Trusted Devices',
+                  buttonLabel: 'Manage',
+                  onTap: () async {
+                    await showDialog<void>(context: context, builder: (_) => const FavoritesDialog());
+                  },
+                ),
+              ],
+            ),
+            _SettingsSection(
+              title: 'ABOUT',
               padding: const EdgeInsets.only(bottom: 0),
               children: [
                 _ButtonEntry(
@@ -645,19 +671,18 @@ class _SettingsSection extends StatelessWidget {
   final String title;
   final List<Widget> children;
   final EdgeInsets padding;
+  final bool security;
 
   const _SettingsSection({
     required this.title,
     required this.children,
     this.padding = const EdgeInsets.only(bottom: 15),
+    this.security = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: padding,
-      child: Card(
-        child: Padding(
+    final child = Padding(
           padding: const EdgeInsets.only(left: 15, right: 15, top: 15),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -667,8 +692,9 @@ class _SettingsSection extends StatelessWidget {
               ...children,
             ],
           ),
-        ),
-      ),
-    );
+      );
+    return security
+        ? SecurityGlass(margin: padding, padding: EdgeInsets.zero, child: child)
+        : GlassCard(margin: padding, padding: EdgeInsets.zero, child: child);
   }
 }

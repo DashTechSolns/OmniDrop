@@ -1,23 +1,29 @@
+import 'dart:async';
 import 'dart:io';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:localsend_app/config/init.dart';
 import 'package:localsend_app/config/theme.dart';
 import 'package:localsend_app/gen/strings.g.dart';
 import 'package:localsend_app/pages/home_page_controller.dart';
+import 'package:localsend_app/pages/copy_phone_page.dart';
 import 'package:localsend_app/pages/omnidrop_drawer.dart';
 import 'package:localsend_app/pages/tabs/omnidrop_tabs.dart';
 import 'package:localsend_app/pages/tabs/send_tab.dart';
 import 'package:localsend_app/pages/tabs/settings_tab.dart';
-import 'package:localsend_app/pages/web_share_page.dart';
 import 'package:localsend_app/provider/selection/selected_sending_files_provider.dart';
+import 'package:localsend_app/pages/tabs/send_tab_vm.dart';
 import 'package:localsend_app/util/native/cross_file_converters.dart';
+import 'package:localsend_app/util/native/channel/android_channel.dart' as android_channel;
 import 'package:localsend_app/util/native/file_picker.dart';
 import 'package:localsend_app/widget/dialogs/add_file_dialog.dart';
 import 'package:localsend_app/widget/dialogs/receive_pairing_dialog.dart';
 import 'package:localsend_app/widget/animated_press.dart';
 import 'package:localsend_app/widget/omnidrop_logo.dart';
+import 'package:localsend_app/widget/glass/glass_card.dart';
+import 'package:localsend_app/widget/list_tile/device_list_tile.dart';
 import 'package:localsend_app/widget/responsive_builder.dart';
 import 'package:refena_flutter/refena_flutter.dart';
 import 'package:routerino/routerino.dart';
@@ -26,7 +32,6 @@ enum HomeTab {
   webDrop(Icons.language),
   osPairs(Icons.devices),
   send(Icons.send),
-  cloud(Icons.cloud_outlined),
   me(Icons.person_outline)
   ;
 
@@ -42,8 +47,6 @@ enum HomeTab {
         return 'OS Pairs';
       case HomeTab.send:
         return 'Transfer';
-      case HomeTab.cloud:
-        return 'Cloud';
       case HomeTab.me:
         return 'Me';
     }
@@ -69,6 +72,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> with Refena {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
+  final _transferTabKey = GlobalKey<_TransferTabState>();
   bool _dragAndDropIndicator = false;
 
   @override
@@ -126,52 +130,23 @@ class _HomePageState extends State<HomePage> with Refena {
             drawer: const OmniDropDrawer(),
             appBar: AppBar(
               automaticallyImplyLeading: false,
-              leading: PopupMenuButton<String>(
+              backgroundColor: Colors.transparent,
+              flexibleSpace: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [
+                      colors.primary.withValues(alpha: 0.16),
+                      colors.secondary.withValues(alpha: 0.08),
+                    ],
+                  ),
+                ),
+              ),
+              leading: IconButton(
+                tooltip: 'Open navigation drawer',
+                onPressed: () => _scaffoldKey.currentState?.openDrawer(),
                 icon: const Icon(Icons.more_vert),
-                onSelected: (value) async {
-                  if (value == 'scan') {
-                    await showReceivePairingDialog(context);
-                  } else if (value == 'share') {
-                    await showModalBottomSheet<void>(
-                      context: context,
-                      builder: (context) => SafeArea(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            ListTile(
-                              title: const Text('Nearby devices'),
-                              onTap: () {
-                                Navigator.pop(context);
-                                vm.changeTab(HomeTab.send);
-                              },
-                            ),
-                            ListTile(
-                              title: const Text('WebDrop'),
-                              onTap: () {
-                                Navigator.pop(context);
-                                vm.changeTab(HomeTab.webDrop);
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  } else {
-                    await showDialog<void>(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text('Device migration'),
-                        content: const Text('Device migration - coming soon'),
-                        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
-                      ),
-                    );
-                  }
-                },
-                itemBuilder: (context) => const [
-                  PopupMenuItem(value: 'scan', child: Text('Scan Connect')),
-                  PopupMenuItem(value: 'share', child: Text('Share OmniDrop')),
-                  PopupMenuItem(value: 'migration', child: Text('Copy Phone')),
-                ],
               ),
               title: Row(
                 children: [
@@ -181,10 +156,31 @@ class _HomePageState extends State<HomePage> with Refena {
                 ],
               ),
               actions: [
-                IconButton(
-                  tooltip: 'Open navigation drawer',
-                  onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                PopupMenuButton<String>(
+                  tooltip: 'More actions',
                   icon: const Icon(Icons.menu),
+                  onSelected: (value) async {
+                    if (value == 'scan') {
+                      await showReceivePairingDialog(context, allowWebDropLinks: true);
+                    } else if (value == 'share') {
+                      final shared = await android_channel.shareInstalledApkAndroid();
+                      if (!shared) await android_channel.shareTextInviteAndroid();
+                    } else {
+                      final started = await Navigator.of(context).push<bool>(
+                        MaterialPageRoute(builder: (_) => const CopyPhonePage()),
+                      );
+                      if (started == true && context.mounted) {
+                        vm.changeTab(HomeTab.send);
+                        final transferState = _transferTabKey.currentState;
+                        if (transferState != null) await transferState._startSend();
+                      }
+                    }
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(value: 'scan', child: Text('Scan Connect')),
+                    PopupMenuItem(value: 'share', child: Text('Share OmniDrop')),
+                    PopupMenuItem(value: 'copy', child: Text('Copy Phone')),
+                  ],
                 ),
                 IconButton(
                   tooltip: 'Settings',
@@ -198,72 +194,93 @@ class _HomePageState extends State<HomePage> with Refena {
                 ),
               ],
             ),
-            body: Row(
+            body: Stack(
+              fit: StackFit.expand,
               children: [
-                if (!sizingInformation.isMobile)
-                  NavigationRail(
-                    selectedIndex: vm.currentTab.index,
-                    onDestinationSelected: (index) => vm.changeTab(HomeTab.values[index]),
-                    extended: sizingInformation.isDesktop,
-                    backgroundColor: Theme.of(context).cardColorWithElevation,
-                    destinations: HomeTab.values.map((tab) {
-                      return NavigationRailDestination(
-                        icon: tab == HomeTab.send ? const OmniDropLogo(size: 24) : Icon(tab.icon),
-                        label: Text(tab.label),
-                      );
-                    }).toList(),
-                  ),
-                Expanded(
-                  child: SafeArea(
-                    left: sizingInformation.isMobile,
-                    child: Stack(
-                      children: [
-                        PageView(
-                          controller: vm.controller,
-                          physics: const NeverScrollableScrollPhysics(),
-                          children: const [
-                            WebDropTab(),
-                            OsPairsTab(),
-                            _TransferTab(),
-                            CloudTab(),
-                            MeTab(),
-                          ],
+                IgnorePointer(
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: RadialGradient(
+                            center: const Alignment(-0.85, -0.8),
+                            radius: 1.0,
+                            colors: [colors.primary.withValues(alpha: 0.08), Colors.transparent],
+                          ),
                         ),
-                        if (_dragAndDropIndicator)
-                          Container(
-                            width: double.infinity,
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).scaffoldBackgroundColor,
-                            ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
+                      ),
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: RadialGradient(
+                            center: const Alignment(0.9, 0.9),
+                            radius: 1.0,
+                            colors: [colors.secondary.withValues(alpha: 0.07), Colors.transparent],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Row(
+                  children: [
+                    if (!sizingInformation.isMobile)
+                      NavigationRail(
+                        selectedIndex: vm.currentTab.index,
+                        onDestinationSelected: (index) => vm.changeTab(HomeTab.values[index]),
+                        extended: sizingInformation.isDesktop,
+                        backgroundColor: Colors.transparent,
+                        destinations: HomeTab.values.map((tab) {
+                          return NavigationRailDestination(
+                            icon: tab == HomeTab.send ? const OmniDropLogo(size: 24) : Icon(tab.icon),
+                            label: Text(tab.label),
+                          );
+                        }).toList(),
+                      ),
+                    Expanded(
+                      child: SafeArea(
+                        left: sizingInformation.isMobile,
+                        child: Stack(
+                          children: [
+                            PageView(
+                              controller: vm.controller,
+                              physics: const NeverScrollableScrollPhysics(),
                               children: [
-                                const Icon(Icons.file_download, size: 128),
-                                const SizedBox(height: 30),
-                                Text(t.sendTab.placeItems, style: Theme.of(context).textTheme.titleLarge),
+                                const WebDropTab(),
+                                const OsPairsTab(),
+                                _TransferTab(key: _transferTabKey),
+                                const MeTab(),
                               ],
                             ),
-                          ),
-                      ],
+                            if (_dragAndDropIndicator)
+                              Container(
+                                width: double.infinity,
+                                decoration: BoxDecoration(color: Theme.of(context).scaffoldBackgroundColor),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(Icons.file_download, size: 128),
+                                    const SizedBox(height: 30),
+                                    Text(t.sendTab.placeItems, style: Theme.of(context).textTheme.titleLarge),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ],
             ),
             bottomNavigationBar: sizingInformation.isMobile
-                ? DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                        colors: [
-                          Color.alphaBlend(colors.primary.withValues(alpha: 0.12), colors.surface),
-                          Color.alphaBlend(colors.secondary.withValues(alpha: 0.10), colors.surface),
-                        ],
-                      ),
-                    ),
-                    child: SafeArea(
-                      top: false,
+                ? SafeArea(
+                    top: false,
+                    child: GlassCard(
+                      margin: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                      padding: EdgeInsets.zero,
+                      radius: 30,
+                      blur: true,
                       child: SizedBox(
                         height: 68,
                         child: Row(
@@ -286,9 +303,7 @@ class _HomePageState extends State<HomePage> with Refena {
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    tab == HomeTab.send
-                                      ? const OmniDropLogo(size: 22)
-                                      : Icon(tab.icon, color: selected ? colors.primary : null),
+                                    Icon(tab.icon, color: selected ? colors.primary : null),
                                     Text(tab.label, style: Theme.of(context).textTheme.labelSmall),
                                   ],
                                 ),
@@ -308,21 +323,88 @@ class _HomePageState extends State<HomePage> with Refena {
 }
 
 class _TransferTab extends StatefulWidget {
-  const _TransferTab();
+  const _TransferTab({super.key});
 
   @override
   State<_TransferTab> createState() => _TransferTabState();
 }
 
 class _TransferTabState extends State<_TransferTab> with Refena {
-  Future<void> _createTemporaryQr() async {
+  late final StreamSubscription<List<ConnectivityResult>> _connectivitySubscription;
+  bool _offline = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final connectivity = Connectivity();
+    connectivity.checkConnectivity().then(_updateConnectivity);
+    _connectivitySubscription = connectivity.onConnectivityChanged.listen(_updateConnectivity);
+  }
+
+  void _updateConnectivity(List<ConnectivityResult> results) {
+    final hasLocalNetwork = results.any((result) => result == ConnectivityResult.wifi || result == ConnectivityResult.ethernet);
+    final offline = !hasLocalNetwork;
+    if (mounted && offline != _offline) setState(() => _offline = offline);
+  }
+
+  @override
+  void dispose() {
+    unawaited(_connectivitySubscription.cancel());
+    super.dispose();
+  }
+
+  Future<void> _startSend() async {
+    if (_offline) return;
     var files = ref.read(selectedSendingFilesProvider);
     if (files.isEmpty) {
       await AddFileDialog.open(context: context, options: pickerOptions);
       files = ref.read(selectedSendingFilesProvider);
     }
     if (!mounted || files.isEmpty) return;
-    await context.push(() => WebSharePage(files: files, showQrOnStart: true));
+    await showDialog<void>(
+      context: context,
+      builder: (_) => Consumer(
+        builder: (dialogContext, ref) {
+          final vm = ref.watch(sendTabVmProvider);
+          return AlertDialog(
+            title: const Text('Choose a device'),
+            content: SizedBox(
+              width: 420,
+              child: vm.nearbyDevices.isEmpty
+                  ? Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('No nearby devices found.'),
+                        TextButton(
+                          onPressed: () async {
+                            Navigator.of(dialogContext).pop();
+                            await vm.onTapAddress(context);
+                          },
+                          child: const Text('Enter device address'),
+                        ),
+                      ],
+                    )
+                  : SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          for (final device in vm.nearbyDevices)
+                            DeviceListTile(
+                              device: device,
+                              onTap: () async {
+                                Navigator.of(dialogContext).pop();
+                                await vm.onTapDevice(context, device);
+                              },
+                            ),
+                        ],
+                      ),
+                    ),
+            ),
+            actions: [TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Close'))],
+          );
+        },
+      ),
+    );
   }
 
   @override
@@ -333,37 +415,43 @@ class _TransferTabState extends State<_TransferTab> with Refena {
         Positioned.fill(
           child: Padding(
             padding: const EdgeInsets.only(bottom: 68),
-            child: const SendTab(),
-          ),
-        ),
-        Positioned(
-          top: 58,
-          left: 0,
-          right: 0,
-          child: Center(
-            child: AnimatedPress(
-              child: FilledButton.icon(
-                onPressed: _createTemporaryQr,
-                icon: const Icon(Icons.send),
-                label: const Text('Send'),
-              ),
-            ),
+            child: _offline ? _buildOfflineCard() : const SendTab(),
           ),
         ),
         Positioned(
           bottom: 10,
-          left: 0,
-          right: 0,
+          left: 16,
+          right: 16,
           child: Center(
-            child: AnimatedPress(
-              child: FilledButton.tonalIcon(
-                onPressed: () => showReceivePairingDialog(context),
-                style: FilledButton.styleFrom(
-                  backgroundColor: colors.secondaryContainer,
-                  foregroundColor: colors.onSecondaryContainer,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: AnimatedPress(
+                      child: FilledButton.icon(
+                        onPressed: _offline ? null : _startSend,
+                        icon: const Icon(Icons.send),
+                        label: const Text('Send'),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: AnimatedPress(
+                      child: FilledButton.tonalIcon(
+                        onPressed: _offline ? null : () => showReceivePairingDialog(context),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: colors.secondaryContainer,
+                          foregroundColor: colors.onSecondaryContainer,
+                        ),
+                        icon: const Icon(Icons.download),
+                        label: const Text('Receive'),
+                      ),
+                    ),
+                  ),
+                ],
                 ),
-                icon: const Icon(Icons.download),
-                label: const Text('Receive'),
               ),
             ),
           ),
@@ -371,4 +459,30 @@ class _TransferTabState extends State<_TransferTab> with Refena {
       ],
     );
   }
+
+  Widget _buildOfflineCard() => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 16, 16, 86),
+    child: GlassCard(
+      margin: EdgeInsets.zero,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text("You're offline. OmniDrop requires a local network connection for device discovery."),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: defaultTargetPlatform == TargetPlatform.android ? () async => android_channel.openWifiSettingsAndroid() : null,
+            icon: const Icon(Icons.wifi),
+            label: const Text('Open Wi-Fi Settings'),
+          ),
+          const SizedBox(height: 16),
+          const Text('1. Turn on Wi-Fi or connect to the other device\'s hotspot.'),
+          const SizedBox(height: 8),
+          const Text('2. Return to OmniDrop.'),
+          const SizedBox(height: 8),
+          const Text('3. Tap Send or Receive.'),
+        ],
+      ),
+    ),
+  );
 }

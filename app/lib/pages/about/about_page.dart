@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:localsend_app/gen/assets.gen.dart';
 import 'package:localsend_app/gen/strings.g.dart';
 import 'package:localsend_app/pages/debug/debug_page.dart';
+import 'package:localsend_app/provider/version_provider.dart';
 import 'package:localsend_app/util/i18n.dart';
 import 'package:localsend_app/widget/responsive_list_view.dart';
+import 'package:refena_flutter/refena_flutter.dart';
 import 'package:routerino/routerino.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -34,6 +36,14 @@ class AboutPage extends StatelessWidget {
           Center(child: Assets.img.logo512.image(width: 112, height: 112)),
           const SizedBox(height: 8),
           Center(child: Text(t.appName, style: Theme.of(context).textTheme.titleLarge)),
+          Consumer(
+            builder: (context, ref) => ref
+                .watch(versionProvider)
+                .maybeWhen(
+                  data: (version) => Text('Version ${version.combinedString}', textAlign: TextAlign.center),
+                  orElse: () => const SizedBox.shrink(),
+                ),
+          ),
           Text(
             '© ${DateTime.now().year} Tien Do Nam',
             textAlign: TextAlign.center,

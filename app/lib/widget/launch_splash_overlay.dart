@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:localsend_app/config/theme.dart';
 import 'package:localsend_app/gen/assets.gen.dart';
 import 'package:localsend_app/widget/omnidrop_logo.dart';
 
@@ -43,9 +44,28 @@ class _LaunchSplashOverlayState extends State<LaunchSplashOverlay> with SingleTi
             child: AnimatedOpacity(
               opacity: _visible ? 1 : 0,
               duration: const Duration(milliseconds: 180),
-              child: ColoredBox(
-                color: Theme.of(context).colorScheme.surface,
-                child: AnimatedBuilder(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  DecoratedBox(
+                    decoration: const BoxDecoration(
+                      gradient: RadialGradient(
+                        center: Alignment(-0.8, -0.8),
+                        radius: 1.05,
+                        colors: [Color(0x1A00D9FF), glassBackground],
+                      ),
+                    ),
+                  ),
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: RadialGradient(
+                        center: const Alignment(0.9, 0.9),
+                        radius: 1.0,
+                        colors: [glassViolet.withValues(alpha: 0.10), Colors.transparent],
+                      ),
+                    ),
+                  ),
+                  AnimatedBuilder(
                   animation: _controller,
                   builder: (context, _) {
                     final node = (_controller.value * 3).floor().clamp(0, 2);
@@ -68,10 +88,21 @@ class _LaunchSplashOverlayState extends State<LaunchSplashOverlay> with SingleTi
                           opacity: ((_controller.value - 0.55) / 0.3).clamp(0, 1),
                           child: Text('OmniDrop', style: Theme.of(context).textTheme.headlineMedium),
                         ),
+                        const SizedBox(height: 8),
+                        Opacity(
+                          opacity: ((_controller.value - 0.68) / 0.2).clamp(0, 1),
+                          child: const Text('Wireless. Private. Instant.'),
+                        ),
+                        const SizedBox(height: 18),
+                        Opacity(
+                          opacity: ((_controller.value - 0.82) / 0.16).clamp(0, 1),
+                          child: Text('● Initializing...', style: Theme.of(context).textTheme.bodySmall),
+                        ),
                       ],
                     );
                   },
                 ),
+                ],
               ),
             ),
           ),
