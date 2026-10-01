@@ -66,34 +66,45 @@ class SendTab extends StatelessWidget {
                 }).toList(),
               ),
             ),
-            Card(
-              margin: const EdgeInsets.only(top: 8, bottom: 10, left: _horizontalPadding, right: _horizontalPadding),
-              color: Colors.transparent,
-              elevation: 0,
-              surfaceTintColor: Colors.transparent,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(5),
             Expanded(
-              child: Center(
+              child: Card(
+                margin: const EdgeInsets.only(top: 8, bottom: 10, left: _horizontalPadding, right: _horizontalPadding),
+                color: Colors.transparent,
+                elevation: 0,
+                surfaceTintColor: Colors.transparent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(5),
+                ),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 28),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.folder_open_outlined, size: 42, color: colors.secondary),
-                      const SizedBox(height: 12),
-                      Text('In-app file browser coming soon', style: Theme.of(context).textTheme.titleMedium),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Choose a file type above to add items to your selection.',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 28),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.folder_open_outlined, size: 42, color: colors.secondary),
+                          const SizedBox(height: 12),
+                          Text('In-app file browser coming soon', style: Theme.of(context).textTheme.titleMedium),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Choose a file type above to add items to your selection.',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
-                    padding: const EdgeInsets.symmetric(vertical: 10),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
 
 /// A button that opens a popup menu to select [T].
 /// This is used for the scan button and the send mode button.
