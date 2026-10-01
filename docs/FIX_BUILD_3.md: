@@ -1,0 +1,20 @@
+The previous fix for lib/pages/web_share_page.dart did not take effect — the build still fails with the exact same errors on the exact same lines:
+
+lib/pages/web_share_page.dart:154:26: Error: This expression has type 'void' and can't be used.
+    if (_sendMode) await _init(encrypted: _encrypted);
+lib/pages/web_share_page.dart:160:26: Error: This expression has type 'void' and can't be used.
+    if (_sendMode) await _init(encrypted: _encrypted);
+
+Do the following, in order, and show your work at each step:
+
+1. First, run `git log --oneline -5 -- lib/pages/web_share_page.dart` and show the output, to confirm which commits actually touched this file.
+2. Then, print the exact current content of lib/pages/web_share_page.dart from line 130 to line 175, with line numbers, so the actual surrounding code is visible (not a summary or paraphrase, the literal file content).
+3. Based on what that actually shows, identify precisely why "if (_sendMode) await _init(encrypted: _encrypted);" on both line 154 and line 160 is being treated as an expression rather than a statement. Common causes: it is inside a ternary expression, inside a collection literal, inside an arrow function body ( => ) where only a single expression is allowed, or assigned as a value. State which one it actually is before fixing it.
+4. Fix both occurrences by restructuring so the await call is a plain statement (its own line, inside a normal block with curly braces and a semicolon), not embedded in an expression context. If the surrounding function uses arrow syntax ( => ), convert that function body to a full block body ({ ... }) so a plain if-statement is valid there.
+5. After editing, print the same line range (130-175) again showing the new content, so the actual change is visible.
+6. Commit with a message like "fix: restructure void expression in web_share_page.dart (attempt 2)".
+7. Explicitly push to main. Then run `git log --oneline -3` and show the output to prove the new commit is on main.
+
+Do not touch send_tab.dart or any other file in this task — that one is already fixed and confirmed working.
+
+Report back with all the output from steps 1, 2, 5, and 7 included in your response, not just a summary.
