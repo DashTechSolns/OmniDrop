@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:desktop_drop/desktop_drop.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:localsend_app/config/init.dart';
 import 'package:localsend_app/config/theme.dart';
@@ -451,7 +452,6 @@ class _TransferTabState extends State<_TransferTab> with Refena {
                     ),
                   ),
                 ],
-                ),
               ),
             ),
           ),

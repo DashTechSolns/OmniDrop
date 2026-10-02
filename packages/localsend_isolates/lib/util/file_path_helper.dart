@@ -68,6 +68,14 @@ extension FilePathStringExt on String {
       case 'mp4':
       case 'mov':
         return FileType.video;
+      case 'aac':
+      case 'flac':
+      case 'm4a':
+      case 'mp3':
+      case 'ogg':
+      case 'wav':
+      case 'wma':
+        return FileType.audio;
       case 'pdf':
         return FileType.pdf;
       case 'txt':

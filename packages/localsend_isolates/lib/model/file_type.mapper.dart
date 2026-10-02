@@ -31,6 +31,8 @@ class FileTypeMapper extends EnumMapper<FileType> {
         return FileType.image;
       case r'video':
         return FileType.video;
+      case r'audio':
+        return FileType.audio;
       case r'pdf':
         return FileType.pdf;
       case r'text':
@@ -40,7 +42,7 @@ class FileTypeMapper extends EnumMapper<FileType> {
       case r'other':
         return FileType.other;
       default:
-        return FileType.values[5];
+        return FileType.values[6];
     }
   }
 
@@ -51,6 +53,8 @@ class FileTypeMapper extends EnumMapper<FileType> {
         return r'image';
       case FileType.video:
         return r'video';
+      case FileType.audio:
+        return r'audio';
       case FileType.pdf:
         return r'pdf';
       case FileType.text:

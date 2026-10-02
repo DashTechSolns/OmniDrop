@@ -121,6 +121,8 @@ FileType decodeFromMime(String mime) {
     return FileType.image;
   } else if (mime.startsWith('video/')) {
     return FileType.video;
+  } else if (mime.startsWith('audio/')) {
+    return FileType.audio;
   } else if (mime == 'application/pdf') {
     return FileType.pdf;
   } else if (mime.startsWith('text/')) {
