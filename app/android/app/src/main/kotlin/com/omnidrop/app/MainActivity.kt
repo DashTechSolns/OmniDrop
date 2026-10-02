@@ -291,7 +291,7 @@ class MainActivity : FlutterActivity() {
                         name = it.getString(nameColumn) ?: "",
                         size = it.getLong(sizeColumn).coerceAtLeast(0),
                         uri = ContentUris.withAppendedId(collection, id).toString(),
-                        lastModified = if (modified > 0) Date(modified * 1000).toRfc3339() else null,
+                        lastModified = if (modified > 0) Date(modified * 1000).time.toRfc3339() else null,
                     ).toMap(),
                 )
             }
