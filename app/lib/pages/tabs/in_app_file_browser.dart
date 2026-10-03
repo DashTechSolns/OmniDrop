@@ -4,6 +4,7 @@ import 'package:device_apps/device_apps.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:localsend_app/config/theme.dart';
+import 'package:localsend_app/model/cross_file.dart';
 import 'package:localsend_app/provider/selection/selected_sending_files_provider.dart';
 import 'package:localsend_app/provider/device_info_provider.dart';
 import 'package:localsend_app/util/native/channel/android_channel.dart' as android_channel;
@@ -54,8 +55,6 @@ class _InAppFileBrowserState extends State<InAppFileBrowser> with Refena {
   Future<List<Application>>? _appsFuture;
   Future<List<android_channel.FileInfo>>? _systemFilesFuture;
   final Map<String, Future<Uint8List?>> _thumbnailFutures = {};
-  final Set<String> _selectedMediaUris = {};
-  final Set<String> _stagedAppPackages = {};
   final Set<String> _selectedAssets = {};
   final Set<String> _selectedTreeFiles = {};
   final Set<String> _selectedTreeFolders = {};
@@ -177,21 +176,47 @@ class _InAppFileBrowserState extends State<InAppFileBrowser> with Refena {
         );
   }
 
-  Future<void> _stageApp(Application app) async {
-    await ref
-        .redux(selectedSendingFilesProvider)
-        .dispatchAsync(
-          AddFilesAction<Application>(
-            files: [app],
-            converter: CrossFileConverters.convertApplication,
-          ),
-        );
-    if (mounted) setState(() => _stagedAppPackages.add(app.packageName));
+  Future<void> _toggleApp(Application app) async {
+    await _toggleFile(await CrossFileConverters.convertApplication(app));
   }
+
+  Future<void> _toggleAsset(AssetEntity asset) async {
+    await _toggleFile(await CrossFileConverters.convertAssetEntity(asset));
+  }
+
+  Future<void> _toggleSystemFile(android_channel.FileInfo file) async {
+    await _toggleFile(await CrossFileConverters.convertFileInfo(file));
+  }
+
+  Future<void> _toggleFile(CrossFile file) async {
+    final selection = ref.read(selectedSendingFilesProvider);
+    final selectedIndex = selection.indexWhere((selected) => selected.isSameFile(otherFile: file));
+    if (selectedIndex >= 0) {
+      ref.redux(selectedSendingFilesProvider).dispatch(RemoveSelectedFileAction(selectedIndex));
+    } else {
+      await ref
+          .redux(selectedSendingFilesProvider)
+          .dispatchAsync(
+            AddFilesAction<CrossFile>(
+              files: [file],
+              converter: (file) async => file,
+            ),
+          );
+    }
+  }
+
+  bool _isAssetSelected(AssetEntity asset) =>
+      ref.read(selectedSendingFilesProvider).any((file) => file.asset?.id == asset.id);
+
+  bool _isPathSelected(String path) => ref.read(selectedSendingFilesProvider).any((file) => file.path == path);
+
+  bool _isSystemFileSelected(android_channel.FileInfo file) => _isPathSelected(file.uri);
+
+  Color _selectedColor(BuildContext context) => Theme.of(context).colorScheme.primary.withValues(alpha: 0.16);
 
   @override
   Widget build(BuildContext context) {
-    final selectedFiles = context.watch(selectedSendingFilesProvider);
+    context.watch(selectedSendingFilesProvider);
     final categories = _BrowserCategory.values;
     return Column(
       children: [
@@ -220,33 +245,6 @@ class _InAppFileBrowserState extends State<InAppFileBrowser> with Refena {
             child: _buildCategoryBody(),
           ),
         ),
-        if (selectedFiles.isNotEmpty)
-          ElevatedGlass(
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            radius: glassRadiusCard,
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '${selectedFiles.length} selected · ${selectedFiles.fold<int>(0, (total, file) => total + file.size).asReadableFileSize}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                TextButton(
-                  onPressed: () {
-                    ref.redux(selectedSendingFilesProvider).dispatch(ClearSelectionAction());
-                    setState(() {
-                      _selectedMediaUris.clear();
-                      _stagedAppPackages.clear();
-                    });
-                  },
-                  child: const Text('Clear'),
-                ),
-              ],
-            ),
-          ),
       ],
     );
   }
@@ -282,7 +280,7 @@ class _InAppFileBrowserState extends State<InAppFileBrowser> with Refena {
         return Column(
           children: [
             Align(
-              alignment: Alignment.centerRight,
+              alignment: Alignment.center,
               child: TextButton.icon(
                 onPressed: () async => _stageAssets(assets),
                 icon: const Icon(Icons.select_all),
@@ -290,17 +288,43 @@ class _InAppFileBrowserState extends State<InAppFileBrowser> with Refena {
               ),
             ),
             Expanded(
-              child: _category == _BrowserCategory.audio
+              child: _category == _BrowserCategory.audio || _category == _BrowserCategory.videos
                   ? ListView.builder(
                       itemCount: assets.length,
                       itemBuilder: (context, index) {
                         final asset = assets[index];
-                        final selected = _selectedAssets.contains(asset.id);
+                        final selected = _isAssetSelected(asset) || _selectedAssets.contains(asset.id);
                         return ListTile(
-                          leading: const Icon(Icons.audio_file_outlined),
+                          selected: selected,
+                          selectedTileColor: _selectedColor(context),
+                          leading: _category == _BrowserCategory.audio
+                              ? const Icon(Icons.audio_file_outlined)
+                              : SizedBox(
+                                  width: 64,
+                                  height: 48,
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(glassRadiusSmall),
+                                    child: Stack(
+                                      fit: StackFit.expand,
+                                      children: [
+                                        AssetEntityImage(
+                                          asset,
+                                          isOriginal: false,
+                                          thumbnailSize: const ThumbnailSize.square(240),
+                                          fit: BoxFit.cover,
+                                        ),
+                                        const Center(child: Icon(Icons.play_circle_fill, color: Colors.white70, size: 26)),
+                                      ],
+                                    ),
+                                  ),
+                                ),
                           title: FutureBuilder<String>(
                             future: asset.titleAsync,
-                            builder: (context, title) => Text(title.data ?? 'Audio file', maxLines: 1, overflow: TextOverflow.ellipsis),
+                            builder: (context, title) => Text(
+                              title.data ?? (_category == _BrowserCategory.videos ? 'Video file' : 'Audio file'),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                           trailing: Icon(selected ? Icons.check_circle : Icons.add_circle_outline, color: selected ? glassCyanBright : null),
                           onLongPress: () => setState(() {
@@ -308,36 +332,58 @@ class _InAppFileBrowserState extends State<InAppFileBrowser> with Refena {
                             _selectedAssets.add(asset.id);
                           }),
                           onTap: () async {
-                            if (_assetSelectionMode) {
-                              setState(() => selected ? _selectedAssets.remove(asset.id) : _selectedAssets.add(asset.id));
+                            final pendingSelection = _selectedAssets.contains(asset.id);
+                            final staged = _isAssetSelected(asset);
+                            if (_assetSelectionMode && staged) {
+                              setState(() => _selectedAssets.remove(asset.id));
+                              await _toggleAsset(asset);
+                            } else if (_assetSelectionMode) {
+                              setState(() {
+                                if (pendingSelection) {
+                                  _selectedAssets.remove(asset.id);
+                                } else {
+                                  _selectedAssets.add(asset.id);
+                                }
+                              });
                             } else {
-                              await _stageAssets([asset]);
+                              await _toggleAsset(asset);
                             }
                           },
                         );
                       },
                     )
                   : GridView.builder(
-                      padding: const EdgeInsets.all(8),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3,
-                        crossAxisSpacing: 6,
-                        mainAxisSpacing: 6,
+                      padding: const EdgeInsets.all(6),
+                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 150,
+                        crossAxisSpacing: 4,
+                        mainAxisSpacing: 4,
                       ),
                       itemCount: assets.length,
                       itemBuilder: (context, index) {
                         final asset = assets[index];
-                        final selected = _selectedAssets.contains(asset.id);
+                        final pendingSelection = _selectedAssets.contains(asset.id);
+                        final staged = _isAssetSelected(asset);
+                        final selected = staged || pendingSelection;
                         return GestureDetector(
                           onLongPress: () => setState(() {
                             _assetSelectionMode = true;
                             _selectedAssets.add(asset.id);
                           }),
                           onTap: () async {
-                            if (_assetSelectionMode) {
-                              setState(() => selected ? _selectedAssets.remove(asset.id) : _selectedAssets.add(asset.id));
+                            if (_assetSelectionMode && staged) {
+                              setState(() => _selectedAssets.remove(asset.id));
+                              await _toggleAsset(asset);
+                            } else if (_assetSelectionMode) {
+                              setState(() {
+                                if (pendingSelection) {
+                                  _selectedAssets.remove(asset.id);
+                                } else {
+                                  _selectedAssets.add(asset.id);
+                                }
+                              });
                             } else {
-                              await _stageAssets([asset]);
+                              await _toggleAsset(asset);
                             }
                           },
                           child: Stack(
@@ -345,8 +391,23 @@ class _InAppFileBrowserState extends State<InAppFileBrowser> with Refena {
                             children: [
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(glassRadiusSmall),
-                                child: AssetEntityImage(asset, isOriginal: false, thumbnailSize: const ThumbnailSize.square(240), fit: BoxFit.cover),
+                                child: AssetEntityImage(
+                                  asset,
+                                  isOriginal: false,
+                                  thumbnailSize: const ThumbnailSize.square(240),
+                                  fit: BoxFit.cover,
+                                ),
                               ),
+                              if (selected)
+                                Positioned.fill(
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.20),
+                                      border: Border.all(color: Theme.of(context).colorScheme.primary, width: 2),
+                                      borderRadius: BorderRadius.circular(glassRadiusSmall),
+                                    ),
+                                  ),
+                                ),
                               if (selected)
                                 const Align(
                                   alignment: Alignment.topRight,
@@ -394,21 +455,21 @@ class _InAppFileBrowserState extends State<InAppFileBrowser> with Refena {
         return GridView.builder(
           padding: const EdgeInsets.all(8),
           gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 118,
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 8,
+            maxCrossAxisExtent: 128,
+            mainAxisSpacing: 4,
+            crossAxisSpacing: 4,
             childAspectRatio: 0.76,
           ),
           itemCount: apps.length,
           itemBuilder: (context, index) {
             final app = apps[index];
-            final selected = _stagedAppPackages.contains(app.packageName);
+            final selected = _isPathSelected(app.apkFilePath);
             return Material(
-              color: selected ? Theme.of(context).colorScheme.secondaryContainer : Colors.transparent,
+              color: selected ? _selectedColor(context) : Colors.transparent,
               borderRadius: BorderRadius.circular(glassRadiusSmall),
               child: InkWell(
                 borderRadius: BorderRadius.circular(glassRadiusSmall),
-                onTap: () => _stageApp(app),
+                onTap: () => _toggleApp(app),
                 child: Stack(
                   children: [
                     Padding(
@@ -451,16 +512,19 @@ class _InAppFileBrowserState extends State<InAppFileBrowser> with Refena {
           decoration: const InputDecoration(labelText: 'Text to send', alignLabelWithHint: true),
         ),
         const SizedBox(height: 12),
-        FilledButton.icon(
-          onPressed: () {
-            final text = _textController.text;
-            if (text.isNotEmpty) {
-              ref.redux(selectedSendingFilesProvider).dispatch(AddMessageAction(message: text));
-              _textController.clear();
-            }
-          },
-          icon: const Icon(Icons.add),
-          label: const Text('Add text'),
+        Align(
+          alignment: Alignment.center,
+          child: FilledButton.icon(
+            onPressed: () {
+              final text = _textController.text;
+              if (text.isNotEmpty) {
+                ref.redux(selectedSendingFilesProvider).dispatch(AddMessageAction(message: text));
+                _textController.clear();
+              }
+            },
+            icon: const Icon(Icons.add),
+            label: const Text('Add text'),
+          ),
         ),
       ],
     ),
@@ -565,13 +629,19 @@ class _InAppFileBrowserState extends State<InAppFileBrowser> with Refena {
                       itemCount: entries.length,
                       itemBuilder: (context, index) {
                         final entry = entries[index];
-                        final selected = entry.isDirectory ? _selectedTreeFolders.contains(entry.uri) : _selectedTreeFiles.contains(entry.uri);
+                        final pendingSelection = entry.isDirectory
+                            ? _selectedTreeFolders.contains(entry.uri)
+                            : _selectedTreeFiles.contains(entry.uri);
+                        final staged = !entry.isDirectory && _isPathSelected(entry.uri);
+                        final selected = pendingSelection || staged;
                         return ListTile(
+                          selected: selected,
+                          selectedTileColor: _selectedColor(context),
                           leading: Icon(entry.isDirectory ? Icons.folder_outlined : _fileTypeIcon(entry.name)),
                           title: Text(entry.name, maxLines: 1, overflow: TextOverflow.ellipsis),
                           subtitle: entry.isDirectory ? null : Text(entry.size.asReadableFileSize),
                           trailing: Checkbox(
-                            value: selected,
+                            value: pendingSelection,
                             onChanged: (value) => setState(() {
                               final selection = entry.isDirectory ? _selectedTreeFolders : _selectedTreeFiles;
                               if (value == true) {
@@ -609,20 +679,14 @@ class _InAppFileBrowserState extends State<InAppFileBrowser> with Refena {
                                     _treeEntriesFuture = android_channel.listFolderTreeAndroid(uri: entry.uri);
                                   });
                                 }
-                              : () => setState(() {
-                                  if (selected) {
-                                    _selectedTreeFiles.remove(entry.uri);
-                                    _treeFileEntries.remove(entry.uri);
-                                  } else {
-                                    _selectedTreeFiles.add(entry.uri);
-                                    _treeFileEntries[entry.uri] = android_channel.FileInfo(
-                                      name: entry.name,
-                                      size: entry.size,
-                                      uri: entry.uri,
-                                      lastModified: entry.lastModified,
-                                    );
-                                  }
-                                }),
+                              : () => _toggleSystemFile(
+                                  android_channel.FileInfo(
+                                    name: entry.name,
+                                    size: entry.size,
+                                    uri: entry.uri,
+                                    lastModified: entry.lastModified,
+                                  ),
+                                ),
                         );
                       },
                     ),
@@ -704,18 +768,15 @@ class _InAppFileBrowserState extends State<InAppFileBrowser> with Refena {
           itemCount: files.length,
           itemBuilder: (context, index) {
             final file = files[index];
+            final selected = _isSystemFileSelected(file);
             return ListTile(
+              selected: selected,
+              selectedTileColor: _selectedColor(context),
               leading: Icon(_fileTypeIcon(file.name)),
               title: Text(file.name, maxLines: 1, overflow: TextOverflow.ellipsis),
               subtitle: Text('${file.size.asReadableFileSize}${file.lastModified == null ? '' : ' · ${file.lastModified}'}'),
-              onTap: () async => ref
-                  .redux(selectedSendingFilesProvider)
-                  .dispatchAsync(
-                    AddFilesAction<android_channel.FileInfo>(
-                      files: [file],
-                      converter: CrossFileConverters.convertFileInfo,
-                    ),
-                  ),
+              trailing: Icon(selected ? Icons.check_circle : Icons.add_circle_outline),
+              onTap: () => _toggleSystemFile(file),
             );
           },
         );
@@ -742,41 +803,51 @@ class _InAppFileBrowserState extends State<InAppFileBrowser> with Refena {
             ),
           );
         }
-        if (_category == _BrowserCategory.audio) {
+        if (_category == _BrowserCategory.audio || _category == _BrowserCategory.videos) {
           return ListView.builder(
             itemCount: files.length,
             itemBuilder: (context, index) {
               final file = files[index];
-              final selected = _selectedMediaUris.contains(file.uri);
+              final selected = _isSystemFileSelected(file);
               return ListTile(
+                selected: selected,
+                selectedTileColor: _selectedColor(context),
                 leading: SizedBox.square(
-                  dimension: 48,
+                  dimension: 56,
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(glassRadiusSmall),
-                    child: _buildMediaThumbnail(file, 'audio', BoxFit.cover, fallback: Icons.music_note),
+                    child: _category == _BrowserCategory.audio
+                        ? _buildMediaThumbnail(file, 'audio', BoxFit.cover, fallback: Icons.music_note)
+                        : Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              _buildMediaThumbnail(file, 'videos', BoxFit.cover, fallback: Icons.movie_outlined),
+                              const Center(child: Icon(Icons.play_circle_fill, color: Colors.white70, size: 26)),
+                            ],
+                          ),
                   ),
                 ),
                 title: Text(file.name, maxLines: 1, overflow: TextOverflow.ellipsis),
                 subtitle: Text(file.size.asReadableFileSize),
-                trailing: Icon(selected ? Icons.check_circle : Icons.add_circle_outline),
-                onTap: () => _selectSystemMedia(file),
+                trailing: Icon(selected ? Icons.check_circle : Icons.add_circle_outline, color: selected ? glassCyanBright : null),
+                onTap: () => _toggleSystemFile(file),
               );
             },
           );
         }
         return GridView.builder(
-          padding: const EdgeInsets.all(8),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            crossAxisSpacing: 6,
-            mainAxisSpacing: 6,
+          padding: const EdgeInsets.all(6),
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 150,
+            crossAxisSpacing: 4,
+            mainAxisSpacing: 4,
           ),
           itemCount: files.length,
           itemBuilder: (context, index) {
             final file = files[index];
-            final selected = _selectedMediaUris.contains(file.uri);
+            final selected = _isSystemFileSelected(file);
             return GestureDetector(
-              onTap: () => _selectSystemMedia(file),
+              onTap: () => _toggleSystemFile(file),
               child: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -787,9 +858,18 @@ class _InAppFileBrowserState extends State<InAppFileBrowser> with Refena {
                   if (_category == _BrowserCategory.videos)
                     const Center(child: Icon(Icons.play_circle_fill, color: Colors.white70, size: 30)),
                   if (selected)
-                    const Align(
-                      alignment: Alignment.topRight,
-                      child: Padding(padding: EdgeInsets.all(5), child: Icon(Icons.check_circle)),
+                    Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.20),
+                          border: Border.all(color: Theme.of(context).colorScheme.primary, width: 2),
+                          borderRadius: BorderRadius.circular(glassRadiusSmall),
+                        ),
+                        child: const Align(
+                          alignment: Alignment.topRight,
+                          child: Padding(padding: EdgeInsets.all(5), child: Icon(Icons.check_circle)),
+                        ),
+                      ),
                     ),
                 ],
               ),
@@ -819,23 +899,19 @@ class _InAppFileBrowserState extends State<InAppFileBrowser> with Refena {
     );
   }
 
-  Future<void> _selectSystemMedia(android_channel.FileInfo file) async {
-    await _stageSystemFiles([file]);
-    if (mounted) setState(() => _selectedMediaUris.add(file.uri));
-  }
-
   IconData _fileTypeIcon(String name) {
     final extension = name.split('.').last.toLowerCase();
     return switch (extension) {
       'pdf' => Icons.picture_as_pdf_outlined,
       'doc' || 'docx' || 'odt' => Icons.article_outlined,
+      'xls' || 'xlsx' || 'ods' || 'csv' => Icons.table_chart_outlined,
       'zip' || 'rar' || '7z' || 'tar' || 'gz' => Icons.archive_outlined,
       'apk' => Icons.android,
-      'txt' || 'md' || 'csv' => Icons.text_snippet_outlined,
+      'txt' || 'md' => Icons.text_snippet_outlined,
       'jpg' || 'jpeg' || 'png' || 'gif' || 'webp' => Icons.image_outlined,
       'mp4' || 'mov' || 'mkv' => Icons.movie_outlined,
       'mp3' || 'm4a' || 'wav' || 'flac' => Icons.audio_file_outlined,
-      _ => Icons.insert_drive_file_outlined,
+      _ => Icons.description_outlined,
     };
   }
 

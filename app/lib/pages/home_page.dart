@@ -1,9 +1,6 @@
-import 'dart:async';
 import 'dart:io';
 
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:desktop_drop/desktop_drop.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:localsend_app/config/init.dart';
 import 'package:localsend_app/config/theme.dart';
@@ -14,6 +11,7 @@ import 'package:localsend_app/pages/omnidrop_drawer.dart';
 import 'package:localsend_app/pages/tabs/omnidrop_tabs.dart';
 import 'package:localsend_app/pages/tabs/send_tab.dart';
 import 'package:localsend_app/pages/tabs/settings_tab.dart';
+import 'package:localsend_app/provider/network/send_provider.dart';
 import 'package:localsend_app/provider/selection/selected_sending_files_provider.dart';
 import 'package:localsend_app/pages/tabs/send_tab_vm.dart';
 import 'package:localsend_app/util/native/cross_file_converters.dart';
@@ -26,8 +24,8 @@ import 'package:localsend_app/widget/omnidrop_logo.dart';
 import 'package:localsend_app/widget/glass/glass_card.dart';
 import 'package:localsend_app/widget/list_tile/device_list_tile.dart';
 import 'package:localsend_app/widget/responsive_builder.dart';
+import 'package:localsend_isolates/model/session_status.dart';
 import 'package:refena_flutter/refena_flutter.dart';
-import 'package:routerino/routerino.dart';
 
 enum HomeTab {
   webDrop(Icons.language),
@@ -126,9 +124,20 @@ class _HomePageState extends State<HomePage> with Refena {
       child: ResponsiveBuilder(
         builder: (sizingInformation) {
           final colors = Theme.of(context).colorScheme;
+          final light = Theme.of(context).brightness == Brightness.light;
           return Scaffold(
             key: _scaffoldKey,
             drawer: const OmniDropDrawer(),
+            endDrawer: Drawer(
+              backgroundColor: Colors.transparent,
+              child: GlassCard(
+                margin: EdgeInsets.zero,
+                padding: EdgeInsets.zero,
+                radius: 0,
+                blur: true,
+                child: SafeArea(child: const SettingsTab()),
+              ),
+            ),
             appBar: AppBar(
               automaticallyImplyLeading: false,
               backgroundColor: Colors.transparent,
@@ -138,8 +147,8 @@ class _HomePageState extends State<HomePage> with Refena {
                     begin: Alignment.centerLeft,
                     end: Alignment.centerRight,
                     colors: [
-                      colors.primary.withValues(alpha: 0.16),
-                      colors.secondary.withValues(alpha: 0.08),
+                      colors.primary.withValues(alpha: light ? 0.24 : 0.16),
+                      colors.secondary.withValues(alpha: light ? 0.16 : 0.08),
                     ],
                   ),
                 ),
@@ -185,12 +194,7 @@ class _HomePageState extends State<HomePage> with Refena {
                 ),
                 IconButton(
                   tooltip: 'Settings',
-                  onPressed: () async => await context.push(
-                    () => Scaffold(
-                      appBar: AppBar(title: const Text('Settings')),
-                      body: const SettingsTab(),
-                    ),
-                  ),
+                  onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
                   icon: const Icon(Icons.settings_outlined),
                 ),
               ],
@@ -198,31 +202,7 @@ class _HomePageState extends State<HomePage> with Refena {
             body: Stack(
               fit: StackFit.expand,
               children: [
-                IgnorePointer(
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: RadialGradient(
-                            center: const Alignment(-0.85, -0.8),
-                            radius: 1.0,
-                            colors: [colors.primary.withValues(alpha: 0.08), Colors.transparent],
-                          ),
-                        ),
-                      ),
-                      DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: RadialGradient(
-                            center: const Alignment(0.9, 0.9),
-                            radius: 1.0,
-                            colors: [colors.secondary.withValues(alpha: 0.07), Colors.transparent],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                _OmniDropBackground(colors: colors, light: light),
                 Row(
                   children: [
                     if (!sizingInformation.isMobile)
@@ -323,6 +303,52 @@ class _HomePageState extends State<HomePage> with Refena {
   }
 }
 
+const String? _darkBackgroundImage = null;
+const String? _lightBackgroundImage = null;
+
+class _OmniDropBackground extends StatelessWidget {
+  final ColorScheme colors;
+  final bool light;
+
+  const _OmniDropBackground({required this.colors, required this.light});
+
+  @override
+  Widget build(BuildContext context) {
+    final image = light ? _lightBackgroundImage : _darkBackgroundImage;
+    return IgnorePointer(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: light ? const Color(0xFFEAF5FA) : glassBackground,
+          image: image == null ? null : DecorationImage(image: AssetImage(image), fit: BoxFit.cover),
+        ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: const Alignment(-0.85, -0.8),
+                  radius: 1.0,
+                  colors: [colors.primary.withValues(alpha: light ? 0.20 : 0.22), Colors.transparent],
+                ),
+              ),
+            ),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: const Alignment(0.9, 0.9),
+                  radius: 1.0,
+                  colors: [colors.secondary.withValues(alpha: light ? 0.12 : 0.18), Colors.transparent],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _TransferTab extends StatefulWidget {
   const _TransferTab({super.key});
 
@@ -331,31 +357,7 @@ class _TransferTab extends StatefulWidget {
 }
 
 class _TransferTabState extends State<_TransferTab> with Refena {
-  late final StreamSubscription<List<ConnectivityResult>> _connectivitySubscription;
-  bool _offline = false;
-
-  @override
-  void initState() {
-    super.initState();
-    final connectivity = Connectivity();
-    connectivity.checkConnectivity().then(_updateConnectivity);
-    _connectivitySubscription = connectivity.onConnectivityChanged.listen(_updateConnectivity);
-  }
-
-  void _updateConnectivity(List<ConnectivityResult> results) {
-    final hasLocalNetwork = results.any((result) => result == ConnectivityResult.wifi || result == ConnectivityResult.ethernet);
-    final offline = !hasLocalNetwork;
-    if (mounted && offline != _offline) setState(() => _offline = offline);
-  }
-
-  @override
-  void dispose() {
-    unawaited(_connectivitySubscription.cancel());
-    super.dispose();
-  }
-
   Future<void> _startSend() async {
-    if (_offline) return;
     var files = ref.read(selectedSendingFilesProvider);
     if (files.isEmpty) {
       await AddFileDialog.open(context: context, options: pickerOptions);
@@ -410,13 +412,16 @@ class _TransferTabState extends State<_TransferTab> with Refena {
 
   @override
   Widget build(BuildContext context) {
+    final selectedFiles = context.watch(selectedSendingFilesProvider);
+    final sessions = context.watch(sendProvider);
+    final transferInProgress = sessions.values.any((session) => session.status == SessionStatus.sending);
     final colors = Theme.of(context).colorScheme;
     return Stack(
       children: [
         Positioned.fill(
           child: Padding(
             padding: const EdgeInsets.only(bottom: 68),
-            child: _offline ? _buildOfflineCard() : const SendTab(),
+            child: const SendTab(),
           ),
         ),
         Positioned(
@@ -431,7 +436,7 @@ class _TransferTabState extends State<_TransferTab> with Refena {
                   Expanded(
                     child: AnimatedPress(
                       child: FilledButton.icon(
-                        onPressed: _offline ? null : _startSend,
+                        onPressed: _startSend,
                         icon: const Icon(Icons.send),
                         label: const Text('Send'),
                       ),
@@ -441,7 +446,7 @@ class _TransferTabState extends State<_TransferTab> with Refena {
                   Expanded(
                     child: AnimatedPress(
                       child: FilledButton.tonalIcon(
-                        onPressed: _offline ? null : () => showReceivePairingDialog(context),
+                        onPressed: () => showReceivePairingDialog(context),
                         style: FilledButton.styleFrom(
                           backgroundColor: colors.secondaryContainer,
                           foregroundColor: colors.onSecondaryContainer,
@@ -456,33 +461,34 @@ class _TransferTabState extends State<_TransferTab> with Refena {
             ),
           ),
         ),
+        if (selectedFiles.isNotEmpty)
+          Positioned(
+            right: 16,
+            bottom: 66,
+            child: ElevatedGlass(
+              margin: EdgeInsets.zero,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+              radius: glassRadiusPill,
+              blur: true,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (transferInProgress) ...[
+                    SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  Text('${selectedFiles.length} selected', style: Theme.of(context).textTheme.labelLarge),
+                ],
+              ),
+            ),
+          ),
       ],
     );
   }
-
-  Widget _buildOfflineCard() => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 16, 16, 86),
-    child: GlassCard(
-      margin: EdgeInsets.zero,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text("You're offline. OmniDrop requires a local network connection for device discovery."),
-          const SizedBox(height: 12),
-          FilledButton.icon(
-            onPressed: defaultTargetPlatform == TargetPlatform.android ? () async => android_channel.openWifiSettingsAndroid() : null,
-            icon: const Icon(Icons.wifi),
-            label: const Text('Open Wi-Fi Settings'),
-          ),
-          const SizedBox(height: 16),
-          const Text('1. Turn on Wi-Fi or connect to the other device\'s hotspot.'),
-          const SizedBox(height: 8),
-          const Text('2. Return to OmniDrop.'),
-          const SizedBox(height: 8),
-          const Text('3. Tap Send or Receive.'),
-        ],
-      ),
-    ),
-  );
 }

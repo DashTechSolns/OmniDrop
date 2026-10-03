@@ -15,7 +15,7 @@ class GlassCard extends StatelessWidget {
     this.margin = const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
     this.padding = const EdgeInsets.all(20),
     this.radius = glassRadiusMajor,
-    this.blur = false,
+    this.blur = true,
     super.key,
   });
 
@@ -105,8 +105,8 @@ class _GlassSurface extends StatelessWidget {
   Widget build(BuildContext context) {
     final light = Theme.of(context).brightness == Brightness.light;
     final fill = switch ((tone, light)) {
-      (_GlassTone.standard, true) => Colors.white.withValues(alpha: 0.72),
-      (_GlassTone.standard, false) => const Color(0xC70F1C28),
+      (_GlassTone.standard, true) => Colors.white.withValues(alpha: 0.82),
+      (_GlassTone.standard, false) => const Color(0xD9101C28),
       (_GlassTone.elevated, true) => Colors.white.withValues(alpha: 0.82),
       (_GlassTone.elevated, false) => const Color(0xE012202D),
       (_GlassTone.security, true) => const Color(0xFFE6F8F2),

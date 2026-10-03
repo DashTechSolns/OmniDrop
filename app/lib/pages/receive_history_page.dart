@@ -14,6 +14,7 @@ import 'package:localsend_app/util/native/platform_check.dart';
 import 'package:localsend_app/widget/dialogs/file_info_dialog.dart';
 import 'package:localsend_app/widget/dialogs/history_clear_dialog.dart';
 import 'package:localsend_app/widget/file_thumbnail.dart';
+import 'package:localsend_app/widget/glass/glass_card.dart';
 import 'package:localsend_app/widget/responsive_list_view.dart';
 import 'package:localsend_isolates/model/device.dart';
 import 'package:localsend_isolates/model/session_status.dart';
@@ -71,11 +72,16 @@ class ReceiveHistoryPage extends StatelessWidget {
       body: ResponsiveListView(
         padding: const EdgeInsets.symmetric(vertical: 20),
         children: [
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
+          GlassCard(
+            margin: const EdgeInsets.symmetric(horizontal: 15),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const SizedBox(width: 15),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 12,
+                  runSpacing: 8,
+                  children: [
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Theme.of(context).colorScheme.secondaryContainerIfDark,
@@ -91,7 +97,6 @@ class ReceiveHistoryPage extends StatelessWidget {
                   icon: const Icon(Icons.folder),
                   label: Text(t.receiveHistoryPage.openFolder),
                 ),
-                const SizedBox(width: 20),
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Theme.of(context).colorScheme.secondaryContainerIfDark,
@@ -112,19 +117,18 @@ class ReceiveHistoryPage extends StatelessWidget {
                   icon: const Icon(Icons.delete),
                   label: Text(t.receiveHistoryPage.deleteHistory),
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          if (entries.isEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 100),
-              child: Center(child: Text(t.receiveHistoryPage.empty, style: Theme.of(context).textTheme.headlineMedium)),
-            )
-          else
-            ...entries.map((entry) {
+                  ],
+                ),
+                const SizedBox(height: 20),
+                if (entries.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 30, bottom: 30),
+                    child: Center(child: Text(t.receiveHistoryPage.empty, style: Theme.of(context).textTheme.headlineMedium)),
+                  )
+                else
+                  ...entries.map((entry) {
               return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+                padding: const EdgeInsets.symmetric(vertical: 8),
                 child: InkWell(
                   splashColor: Colors.transparent,
                   splashFactory: NoSplash.splashFactory,
@@ -182,15 +186,9 @@ class ReceiveHistoryPage extends StatelessWidget {
                             Text(
                               entry.fileName,
                               style: const TextStyle(fontSize: 16),
-                              maxLines: 1,
-                              overflow: TextOverflow.fade,
-                              softWrap: false,
                             ),
                             Text(
                               '${entry.timestampString} - ${entry.fileSize.asReadableFileSize} - ${entry.senderAlias}',
-                              maxLines: 1,
-                              overflow: TextOverflow.fade,
-                              softWrap: false,
                               style: const TextStyle(color: Colors.grey),
                             ),
                           ],
@@ -237,7 +235,10 @@ class ReceiveHistoryPage extends StatelessWidget {
                   ),
                 ),
               );
-            }),
+                  }),
+              ],
+            ),
+          ),
         ],
       ),
     );
