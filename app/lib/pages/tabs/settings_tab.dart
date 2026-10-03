@@ -108,6 +108,7 @@ class SettingsTab extends StatelessWidget {
               title: 'GENERAL',
               children: [
                 if (defaultTargetPlatform == TargetPlatform.android) ...[
+                  const _SettingsEntry(label: 'Save Location', child: _AndroidSaveLocationSetting()),
                   _ButtonEntry(
                     label: 'Notifications',
                     buttonLabel: 'Open',
@@ -174,7 +175,7 @@ class SettingsTab extends StatelessWidget {
                     }
                   },
                 ),
-                if (checkPlatformWithFileSystem())
+                if (checkPlatformWithFileSystem() && defaultTargetPlatform != TargetPlatform.android)
                   _SettingsEntry(
                     label: t.settingsTab.receive.destination,
                     child: TextButton(
@@ -561,6 +562,76 @@ class SettingsTab extends StatelessWidget {
     );
   }
 }
+
+class _AndroidSaveLocationSetting extends StatefulWidget {
+  const _AndroidSaveLocationSetting();
+
+  @override
+  State<_AndroidSaveLocationSetting> createState() => _AndroidSaveLocationSettingState();
+}
+
+class _AndroidSaveLocationSettingState extends State<_AndroidSaveLocationSetting> {
+  late Future<(String, bool)> _storageInfo;
+
+  @override
+  void initState() {
+    super.initState();
+    _storageInfo = _loadStorageInfo();
+  }
+
+  Future<(String, bool)> _loadStorageInfo() async {
+    final location = await android_channel.getSaveLocationAndroid();
+    final hasRemovable = await android_channel.hasRemovableStorageAndroid();
+    return (location, hasRemovable);
+  }
+
+  Future<(String, bool)> _changeLocation(String location, bool hasRemovable) async {
+    var saved = false;
+    try {
+      saved = await android_channel.setSaveLocationAndroid(storage: location);
+    } catch (_) {}
+    return (saved ? location : 'internal', hasRemovable);
+  }
+
+  Future<void> _chooseFolder(String location) async {
+    final uri = await android_channel.pickStorageTreeAndroid(storage: location);
+    if (mounted && uri != null) setState(() => _storageInfo = _loadStorageInfo());
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<(String, bool)>(
+    future: _storageInfo,
+    builder: (context, snapshot) {
+      if (!snapshot.hasData) return const SizedBox(height: 48, child: Center(child: CircularProgressIndicator(strokeWidth: 2)));
+      final (location, hasRemovable) = snapshot.data!;
+      final selected = location == 'sd' && hasRemovable ? 'sd' : 'internal';
+      return Row(
+        children: [
+          Expanded(
+            child: DropdownButton<String>(
+              value: selected,
+              isExpanded: true,
+              items: [
+                const DropdownMenuItem(value: 'internal', child: Text('Internal storage', overflow: TextOverflow.ellipsis)),
+                if (hasRemovable) const DropdownMenuItem(value: 'sd', child: Text('SD card', overflow: TextOverflow.ellipsis)),
+              ],
+              onChanged: (value) {
+                if (value == null || value == selected) return;
+                setState(() => _storageInfo = _changeLocation(value, hasRemovable));
+              },
+            ),
+          ),
+          IconButton(
+            tooltip: 'Choose storage folder',
+            onPressed: () => _chooseFolder(selected),
+            icon: const Icon(Icons.folder_open),
+          ),
+        ],
+      );
+    },
+  );
+}
+
 class _SettingsEntry extends StatelessWidget {
   final String label;
   final Widget child;

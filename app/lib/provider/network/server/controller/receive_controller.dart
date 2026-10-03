@@ -23,6 +23,7 @@ import 'package:localsend_app/provider/selection/selected_receiving_files_provid
 import 'package:localsend_app/provider/selection/selected_sending_files_provider.dart';
 import 'package:localsend_app/provider/settings_provider.dart';
 import 'package:localsend_app/util/native/directories.dart';
+import 'package:localsend_app/util/native/channel/android_channel.dart' as android_channel;
 import 'package:localsend_app/util/native/platform_check.dart';
 import 'package:localsend_app/util/native/tray_helper.dart';
 import 'package:localsend_app/widget/dialogs/open_file_dialog.dart';
@@ -76,7 +77,15 @@ class ReceiveController {
     }
 
     final settings = server.ref.read(settingsProvider);
-    final destinationDir = settings.destination ?? await getDefaultDestinationDirectory();
+    final String destinationDir;
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      final storage = await android_channel.getSaveLocationAndroid();
+      destinationDir = await android_channel.getStorageTreeAndroid(storage: storage) ??
+          settings.destination ??
+          await getDefaultDestinationDirectory();
+    } else {
+      destinationDir = settings.destination ?? await getDefaultDestinationDirectory();
+    }
     final cacheDir = await getCacheDirectory();
     final sessionId = event.sessionId;
     final files = {

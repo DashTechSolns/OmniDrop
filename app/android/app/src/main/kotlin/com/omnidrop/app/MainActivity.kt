@@ -7,19 +7,25 @@ import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.database.Cursor
+import android.graphics.Bitmap
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.util.Size
+import android.os.storage.StorageManager
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.Settings
 import androidx.core.content.FileProvider
+import androidx.documentfile.provider.DocumentFile
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
+import java.io.FileInputStream
+import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -32,6 +38,7 @@ private const val REQUEST_CODE_PICK_DIRECTORY_PATH = 2
 private const val REQUEST_CODE_PICK_FILE = 3
 private const val REQUEST_CODE_LOCAL_NETWORK = 4
 private const val REQUEST_CODE_PICK_FOLDER_TREE = 5
+private const val REQUEST_CODE_PICK_STORAGE_TREE = 6
 
 // Not available as a constant in compileSdk 36.
 private const val PERMISSION_ACCESS_LOCAL_NETWORK = "android.permission.ACCESS_LOCAL_NETWORK"
@@ -40,6 +47,8 @@ private const val API_LEVEL_ANDROID_17 = 37
 class MainActivity : FlutterActivity() {
     private var pendingResult: MethodChannel.Result? = null
     private var pendingPermissionResult: MethodChannel.Result? = null
+    private var pendingStorageLocation = "internal"
+    private var pendingStoragePickerForSetting = false
 
     /// share_handler drops share intents arriving via onNewIntent while the Dart side
     /// is not subscribed to its media stream yet, which happens when this singleTask
@@ -102,7 +111,51 @@ class MainActivity : FlutterActivity() {
 
                 "pickFolderTree" -> {
                     pendingResult = result
-                    openFolderTreePicker()
+                    pendingStorageLocation = "internal"
+                    pendingStoragePickerForSetting = false
+                    openStorageTreePicker("internal")
+                }
+
+                "pickStorageTree" -> {
+                    pendingResult = result
+                    val storage = call.argument<String>("storage") ?: "internal"
+                    pendingStoragePickerForSetting = false
+                    openStorageTreePicker(storage)
+                }
+
+                "getStorageTree" -> {
+                    val storage = call.argument<String>("storage") ?: "internal"
+                    result.success(getStorageTree(storage)?.toString())
+                }
+
+                "hasRemovableStorage" -> result.success(hasRemovableStorage())
+
+                "getSaveLocation" -> {
+                    val preferences = getSharedPreferences("storage", MODE_PRIVATE)
+                    val location = preferences.getString("save_location", "internal") ?: "internal"
+                    if (location == "sd" && !hasRemovableStorage()) {
+                        preferences.edit().putString("save_location", "internal").apply()
+                        result.success("internal")
+                    } else {
+                        result.success(location)
+                    }
+                }
+
+                "setSaveLocation" -> {
+                    val storage = call.argument<String>("storage") ?: "internal"
+                    if (storage == "sd" && !hasRemovableStorage()) {
+                        result.success(false)
+                    } else {
+                        val tree = getStorageTree(storage)
+                        if (tree != null) {
+                            getSharedPreferences("storage", MODE_PRIVATE).edit().putString("save_location", storage).apply()
+                            result.success(true)
+                        } else {
+                            pendingResult = result
+                            pendingStoragePickerForSetting = true
+                            openStorageTreePicker(storage)
+                        }
+                    }
                 }
 
                 "listFolderTree" -> {
@@ -122,6 +175,8 @@ class MainActivity : FlutterActivity() {
                 "getFileDescriptor" -> handleGetFileDescriptor(call, result)
 
                 "createFile" -> handleCreateFile(call, result)
+
+                "copyFileToTree" -> handleCopyFileToTree(call, result)
 
                 "openFileForWriting" -> handleOpenFileForWriting(call, result)
 
@@ -172,7 +227,20 @@ class MainActivity : FlutterActivity() {
                     result.success(getDownloadsDirectory())
                 }
 
-                "queryMediaFiles" -> result.success(queryMediaFiles(call.argument<String>("category") ?: "downloads"))
+                "queryMediaFiles" -> {
+                    try {
+                        result.success(queryMediaFiles(call.argument<String>("category") ?: "downloads"))
+                    } catch (e: SecurityException) {
+                        result.error("PERMISSION_DENIED", e.message ?: "Media access was denied", null)
+                    }
+                }
+
+                "loadMediaThumbnail" -> {
+                    val uri = call.argument<String>("uri")
+                    val category = call.argument<String>("category")
+                    if (uri == null || category == null) result.error("INVALID_ARGUMENT", "Missing URI or category", null)
+                    else result.success(loadMediaThumbnail(Uri.parse(uri), category))
+                }
 
                 "requestLocalNetworkPermission" -> {
                     if (hasLocalNetworkPermission()) {
@@ -240,7 +308,17 @@ class MainActivity : FlutterActivity() {
 
     private fun queryMediaFiles(category: String): List<Map<String, Any?>> {
         val documents = category == "documents"
-        val collection = MediaStore.Files.getContentUri("external")
+        val collection = when (category) {
+            "images" -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+            "videos" -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+            "audio" -> MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+            "downloads" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL)
+            } else {
+                MediaStore.Files.getContentUri("external")
+            }
+            else -> MediaStore.Files.getContentUri("external")
+        }
         val projection = arrayOf(
             MediaStore.MediaColumns._ID,
             MediaStore.MediaColumns.DISPLAY_NAME,
@@ -261,19 +339,16 @@ class MainActivity : FlutterActivity() {
             "application/epub+zip",
             "application/zip",
         )
-        val selection = if (documents) {
-            "${MediaStore.MediaColumns.MIME_TYPE} IN (${supportedMimeTypes.joinToString(",") { "?" }})"
-        } else {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?"
-            } else {
-                "${MediaStore.MediaColumns.DATA} LIKE ?"
-            }
+        val selection = when {
+            documents -> "${MediaStore.MediaColumns.MIME_TYPE} IN (${supportedMimeTypes.joinToString(",") { "?" }})"
+            category == "downloads" && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?"
+            category == "downloads" -> "${MediaStore.MediaColumns.DATA} LIKE ?"
+            else -> null
         }
-        val selectionArgs = if (documents) {
-            supportedMimeTypes
-        } else {
-            arrayOf(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) "Download/%" else "${getDownloadsDirectory()}%")
+        val selectionArgs = when {
+            documents -> supportedMimeTypes
+            category == "downloads" -> arrayOf(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) "Download/%" else "${getDownloadsDirectory()}%")
+            else -> null
         }
         val sortOrder = "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
         val files = mutableListOf<Map<String, Any?>>()
@@ -297,6 +372,96 @@ class MainActivity : FlutterActivity() {
             }
         }
         return files
+    }
+
+    @Suppress("DEPRECATION")
+    private fun loadMediaThumbnail(uri: Uri, category: String): ByteArray? {
+        return try {
+            val bitmap = when {
+                category == "audio" -> {
+                    val retriever = MediaMetadataRetriever()
+                    try {
+                        retriever.setDataSource(this, uri)
+                        val embeddedArt = retriever.embeddedPicture ?: return null
+                        decodeEmbeddedArtwork(embeddedArt)
+                    } finally {
+                        retriever.release()
+                    }
+                }
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> contentResolver.loadThumbnail(uri, Size(256, 256), null)
+                category == "images" -> MediaStore.Images.Thumbnails.getThumbnail(
+                    contentResolver,
+                    ContentUris.parseId(uri),
+                    MediaStore.Images.Thumbnails.MINI_KIND,
+                    null,
+                )
+                category == "videos" -> MediaStore.Video.Thumbnails.getThumbnail(
+                    contentResolver,
+                    ContentUris.parseId(uri),
+                    MediaStore.Video.Thumbnails.MINI_KIND,
+                    null,
+                )
+                else -> null
+            } ?: return null
+            ByteArrayOutputStream().use { output ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 78, output)
+                bitmap.recycle()
+                output.toByteArray()
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun hasRemovableStorage(): Boolean {
+        val storageManager = getSystemService(Context.STORAGE_SERVICE) as StorageManager
+        return storageManager.storageVolumes.any { it.isRemovable && it.state == Environment.MEDIA_MOUNTED }
+    }
+
+    private fun decodeEmbeddedArtwork(data: ByteArray): Bitmap? {
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeByteArray(data, 0, data.size, bounds)
+        var sampleSize = 1
+        while (bounds.outWidth / sampleSize > 256 || bounds.outHeight / sampleSize > 256) {
+            sampleSize *= 2
+        }
+        return android.graphics.BitmapFactory.decodeByteArray(
+            data,
+            0,
+            data.size,
+            android.graphics.BitmapFactory.Options().apply { inSampleSize = sampleSize },
+        )
+    }
+
+    private fun getStorageTree(storage: String): Uri? {
+        val preferences = getSharedPreferences("storage", MODE_PRIVATE)
+        val key = if (storage == "sd") "tree_sd" else "tree_internal"
+        val saved = preferences.getString(key, null)?.let(Uri::parse)
+        if (saved != null && contentResolver.persistedUriPermissions.any { it.uri == saved && it.isReadPermission && it.isWritePermission }) {
+            ensureOmniDropFolders(saved)
+            return saved
+        }
+        if (saved != null) preferences.edit().remove(key).apply()
+
+        val externalTree = contentResolver.persistedUriPermissions.firstOrNull { permission ->
+            if (!permission.isReadPermission || !permission.isWritePermission) return@firstOrNull false
+            val id = runCatching { DocumentsContract.getTreeDocumentId(permission.uri) }.getOrNull() ?: return@firstOrNull false
+            if (storage == "sd") id.substringBefore(':') != "primary" else id.substringBefore(':') == "primary"
+        }?.uri ?: return null
+        preferences.edit().putString(key, externalTree.toString()).apply()
+        ensureOmniDropFolders(externalTree)
+        return externalTree
+    }
+
+    private fun ensureOmniDropFolders(treeUri: Uri) {
+        val root = DocumentFile.fromTreeUri(this, treeUri) ?: throw IllegalStateException("Could not open storage tree")
+        val omniDrop = root.findFile("OmniDrop")?.takeIf { it.isDirectory } ?: root.createDirectory("OmniDrop")
+            ?: throw IllegalStateException("Could not create OmniDrop folder")
+        for (name in listOf("image", "video", "audio", "app", "folder", "other")) {
+            if (omniDrop.findFile(name)?.isDirectory != true && omniDrop.createDirectory(name) == null) {
+                throw IllegalStateException("Could not create OmniDrop/$name folder")
+            }
+        }
     }
 
     private fun isAnimationsEnabled() : Boolean {
@@ -365,8 +530,8 @@ class MainActivity : FlutterActivity() {
                 parentUri
             }
 
-            val documentUri =
-                DocumentsContract.createDocument(contentResolver, parentDocumentUri, mimeType, fileName)
+            val parent = findTreeDocument(parentDocumentUri)
+            val documentUri = parent?.createFile(mimeType, fileName)?.uri
             if (documentUri == null) {
                 result.error("CREATE_FAILED", "Could not create $fileName in $parentUriString", null)
                 return
@@ -435,6 +600,28 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun handleCopyFileToTree(call: MethodCall, result: MethodChannel.Result) {
+        val parentUri = call.argument<String>("parentUri")?.let(Uri::parse)
+        val sourcePath = call.argument<String>("sourcePath")
+        val fileName = call.argument<String>("fileName")
+        val mimeType = call.argument<String>("mimeType") ?: "application/octet-stream"
+        if (parentUri == null || sourcePath == null || fileName == null) {
+            result.error("INVALID_ARGUMENT", "Missing parentUri, sourcePath, or fileName", null)
+            return
+        }
+
+        try {
+            val parent = findTreeDocument(parentUri) ?: throw IllegalStateException("Could not find the destination folder")
+            val documentUri = parent.createFile(mimeType, fileName)?.uri ?: throw IllegalStateException("Could not create $fileName")
+            val output = contentResolver.openOutputStream(documentUri, "wt")
+                ?: throw IllegalStateException("Could not open $fileName for writing")
+            FileInputStream(sourcePath).use { input -> output.use { input.copyTo(it) } }
+            result.success(documentUri.toString())
+        } catch (e: Exception) {
+            result.error("COPY_FAILED", e.message ?: "Could not copy file to storage", null)
+        }
+    }
+
     private fun openDirectoryPicker(onlyPath: Boolean) {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
@@ -449,6 +636,24 @@ class MainActivity : FlutterActivity() {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
         }
         startActivityForResult(intent, REQUEST_CODE_PICK_FOLDER_TREE)
+    }
+
+    private fun openStorageTreePicker(storage: String) {
+        pendingStorageLocation = storage
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val initialUri = if (storage == "sd") {
+                    val volume = (getSystemService(Context.STORAGE_SERVICE) as StorageManager).storageVolumes
+                        .firstOrNull { it.isRemovable && it.state == Environment.MEDIA_MOUNTED }
+                    volume?.uuid?.let { Uri.parse("content://com.android.externalstorage.documents/root/$it") }
+                } else {
+                    Uri.parse("content://com.android.externalstorage.documents/root/primary")
+                }
+                if (initialUri != null) putExtra(DocumentsContract.EXTRA_INITIAL_URI, initialUri)
+            }
+        }
+        startActivityForResult(intent, REQUEST_CODE_PICK_STORAGE_TREE)
     }
 
     private fun openFilePicker() {
@@ -467,8 +672,9 @@ class MainActivity : FlutterActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (resultCode == Activity.RESULT_CANCELED) {
-            if (requestCode == REQUEST_CODE_PICK_FOLDER_TREE) {
-                pendingResult?.success(null)
+            if (requestCode == REQUEST_CODE_PICK_FOLDER_TREE || requestCode == REQUEST_CODE_PICK_STORAGE_TREE) {
+                if (requestCode == REQUEST_CODE_PICK_STORAGE_TREE && pendingStoragePickerForSetting) pendingResult?.success(false)
+                else pendingResult?.success(null)
             } else {
                 pendingResult?.error("CANCELED", "Canceled", null)
             }
@@ -520,11 +726,45 @@ class MainActivity : FlutterActivity() {
                 val takeFlags = data.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
                 if (uri != null) {
                     contentResolver.takePersistableUriPermission(uri, takeFlags)
+                    getSharedPreferences("storage", MODE_PRIVATE).edit().putString("tree_internal", uri.toString()).apply()
+                    ensureOmniDropFolders(uri)
                     pendingResult?.success(uri.toString())
                 } else {
                     pendingResult?.error("Error", "Failed to access folder", null)
                 }
                 pendingResult = null
+            }
+
+            REQUEST_CODE_PICK_STORAGE_TREE -> {
+                val uri = data.data
+                val takeFlags = data.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                if (uri != null) {
+                    try {
+                        val storageId = runCatching { DocumentsContract.getTreeDocumentId(uri).substringBefore(':') }.getOrNull()
+                        val externalStorageProvider = uri.authority == "com.android.externalstorage.documents"
+                        val wrongVolume = !externalStorageProvider ||
+                            pendingStorageLocation == "sd" && storageId == "primary" ||
+                            pendingStorageLocation == "internal" && storageId != "primary"
+                        if (wrongVolume) {
+                            pendingResult?.success(if (pendingStoragePickerForSetting) false else null)
+                            pendingResult = null
+                            pendingStoragePickerForSetting = false
+                            return
+                        }
+                        contentResolver.takePersistableUriPermission(uri, takeFlags)
+                        ensureOmniDropFolders(uri)
+                        val preferences = getSharedPreferences("storage", MODE_PRIVATE)
+                        val treeKey = if (pendingStorageLocation == "sd") "tree_sd" else "tree_internal"
+                        preferences.edit().putString(treeKey, uri.toString()).putString("save_location", pendingStorageLocation).apply()
+                        pendingResult?.success(if (pendingStoragePickerForSetting) true else uri.toString())
+                    } catch (e: Exception) {
+                        pendingResult?.error("STORAGE_SETUP_FAILED", e.message ?: "Could not initialize storage", null)
+                    }
+                } else {
+                    pendingResult?.success(false)
+                }
+                pendingResult = null
+                pendingStoragePickerForSetting = false
             }
 
             REQUEST_CODE_PICK_FILE -> {
@@ -593,30 +833,37 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun listTreeEntries(uri: Uri): List<Map<String, Any?>> {
-        return FastDocumentFile.fromTreeUri(this, uri).listFiles().map { entry ->
+        val root = findTreeDocument(uri) ?: return emptyList()
+        return root.listFiles().map { entry ->
             mapOf(
-                "name" to entry.name,
-                "size" to entry.size.coerceAtLeast(0L),
+                "name" to (entry.name ?: ""),
+                "size" to entry.length().coerceAtLeast(0L),
                 "uri" to entry.uri.toString(),
-                "lastModified" to entry.lastModified?.toRfc3339(),
+                "lastModified" to entry.lastModified().takeIf { it > 0L }?.toRfc3339(),
                 "isDirectory" to entry.isDirectory,
             )
         }
     }
 
     private fun listTreeFiles(uri: Uri, parentPath: String): List<Map<String, Any?>> {
+        val root = findTreeDocument(uri) ?: return emptyList()
+        return listDocumentFiles(root, parentPath)
+    }
+
+    private fun listDocumentFiles(parent: DocumentFile, parentPath: String): List<Map<String, Any?>> {
         val files = mutableListOf<Map<String, Any?>>()
-        for (entry in FastDocumentFile.fromTreeUri(this, uri).listFiles()) {
-            val relativePath = if (parentPath.isEmpty()) entry.name else "$parentPath/${entry.name}"
+        for (entry in parent.listFiles()) {
+            val name = entry.name ?: ""
+            val relativePath = if (parentPath.isEmpty()) name else "$parentPath/$name"
             if (entry.isDirectory) {
-                files.addAll(listTreeFiles(entry.uri, relativePath))
-            } else if (entry.isFile) {
+                files.addAll(listDocumentFiles(entry, relativePath))
+            } else if (entry.isFile && name.isNotEmpty()) {
                 files.add(
                     FileInfo(
                         name = relativePath,
-                        size = entry.size.coerceAtLeast(0L),
+                        size = entry.length().coerceAtLeast(0L),
                         uri = entry.uri.toString(),
-                        lastModified = entry.lastModified?.toRfc3339(),
+                        lastModified = entry.lastModified().takeIf { it > 0L }?.toRfc3339(),
                     ).toMap(),
                 )
             }
@@ -624,53 +871,38 @@ class MainActivity : FlutterActivity() {
         return files
     }
 
-    @SuppressLint("WrongConstant")
     private fun handleCreateDirectory(call: MethodCall, result: MethodChannel.Result) {
         val documentUri = Uri.parse(call.argument<String>("documentUri")!!)
         val directoryName = call.argument<String>("directoryName")!!
-
-        if (folderExists(documentUri, directoryName)) {
-            result.success(null)
-            return
+        try {
+            val parent = findTreeDocument(documentUri) ?: throw IllegalStateException("Could not find the parent folder")
+            val existing = parent.findFile(directoryName)
+            if (existing?.isDirectory == true || parent.createDirectory(directoryName) != null) {
+                result.success(null)
+            } else {
+                result.error("CREATE_FAILED", "Could not create folder $directoryName", null)
+            }
+        } catch (e: Exception) {
+            result.error("CREATE_FAILED", e.message ?: "Could not create folder", null)
         }
-
-        DocumentsContract.createDocument(
-            context.contentResolver, documentUri, DocumentsContract.Document.MIME_TYPE_DIR,
-            directoryName
-        )
-
-        result.success(null)
     }
 
-    private fun folderExists(documentUri: Uri, folderName: String): Boolean {
-        var cursor: Cursor? = null
-        try {
-            val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(documentUri, DocumentsContract.getDocumentId(documentUri))
-            cursor = contentResolver.query(
-                childrenUri,
-                arrayOf(
-                    DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                    DocumentsContract.Document.COLUMN_MIME_TYPE
-                ),
-                null,
-                null,
-                null,
-            )
-
-            if (cursor != null) {
-                while (cursor.moveToNext()) {
-                    val displayName = cursor.getString(0)
-                    val mimeType = cursor.getString(1)
-
-                    if (folderName == displayName && DocumentsContract.Document.MIME_TYPE_DIR == mimeType) {
-                        return true
-                    }
-                }
-            }
-        } finally {
-            cursor?.close()
+    private fun findTreeDocument(uri: Uri): DocumentFile? {
+        val treeUri = Uri.parse(uri.toString().substringBefore("/document/"))
+        val treeDocumentId = runCatching { DocumentsContract.getTreeDocumentId(treeUri) }.getOrNull() ?: return null
+        val targetDocumentId = if (DocumentsContract.isDocumentUri(this, uri)) {
+            DocumentsContract.getDocumentId(uri)
+        } else {
+            treeDocumentId
         }
-        return false
+        if (targetDocumentId != treeDocumentId && !targetDocumentId.startsWith("$treeDocumentId/")) return null
+
+        var current = DocumentFile.fromTreeUri(this, treeUri) ?: return null
+        val relativePath = targetDocumentId.removePrefix(treeDocumentId).trimStart('/')
+        for (name in relativePath.split('/').filter { it.isNotEmpty() }) {
+            current = current.findFile(name) ?: return null
+        }
+        return current
     }
 
     private fun openGallery() {

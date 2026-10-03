@@ -85,6 +85,22 @@ Future<CreatedFileAndroid> createFileAndroid({
   );
 }
 
+Future<String> copyFileToTreeAndroid({
+  required String parentUri,
+  required String sourcePath,
+  required String fileName,
+  required String mimeType,
+}) async {
+  final uri = await _methodChannel.invokeMethod<String>('copyFileToTree', {
+    'parentUri': parentUri,
+    'sourcePath': sourcePath,
+    'fileName': fileName,
+    'mimeType': mimeType,
+  });
+  if (uri == null) throw StateError('Android could not copy $fileName to storage');
+  return uri;
+}
+
 /// Opens an existing document created by [createFileAndroid] for writing and
 /// discards its current content.
 ///

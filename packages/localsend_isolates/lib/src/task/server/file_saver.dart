@@ -45,16 +45,18 @@ Future<FileSaveTarget> prepareFileSaveTarget({
   required String destinationDirectory,
   required String cacheDirectory,
   required String fileName,
+  required String storageCategory,
   required bool saveToGallery,
   required bool isImage,
   required Set<String> createdDirectories,
   int? androidSdkInt,
 }) async {
   final parentDirectory = saveToGallery ? cacheDirectory : destinationDirectory;
+  final destinationName = destinationDirectory.startsWith('content://') ? 'OmniDrop/$storageCategory/$fileName' : fileName;
 
   final (destinationPath, documentUri, finalName) = await digestFilePathAndPrepareDirectory(
     parentDirectory: parentDirectory,
-    fileName: fileName,
+    fileName: saveToGallery ? fileName : destinationName,
     createdDirectories: createdDirectories,
   );
 
@@ -130,19 +132,55 @@ Future<(bool, String?)> saveCachedFileToGallery({
   required String cachedPath,
   required String destinationDirectory,
   required String fileName,
+  required String storageCategory,
   required bool isImage,
   required Set<String> createdDirectories,
 }) async {
+  String? savedToStorageUri;
+  if (destinationDirectory.startsWith('content://')) {
+    final (_, documentUri, finalName) = await digestFilePathAndPrepareDirectory(
+      parentDirectory: destinationDirectory,
+      fileName: 'OmniDrop/$storageCategory/$fileName',
+      createdDirectories: createdDirectories,
+    );
+    savedToStorageUri = await android_channel.copyFileToTreeAndroid(
+      parentUri: documentUri!,
+      sourcePath: cachedPath,
+      fileName: finalName,
+      mimeType: lookupMimeType(finalName) ?? (isImage ? 'image/*' : '*/*'),
+    );
+  }
+
   try {
     isImage ? await Gal.putImage(cachedPath) : await Gal.putVideo(cachedPath);
   } on GalException catch (e) {
     _logger.warning('Could not save to gallery (${e.type.name}), moving to destination directory', e);
 
-    final (fallbackPath, _, _) = await digestFilePathAndPrepareDirectory(
+    if (savedToStorageUri != null) {
+      try {
+        await File(cachedPath).delete();
+      } catch (deleteError) {
+        _logger.warning('Could not delete cached file after copying to storage', deleteError);
+      }
+      return (false, savedToStorageUri);
+    }
+
+    final (fallbackPath, documentUri, finalName) = await digestFilePathAndPrepareDirectory(
       parentDirectory: destinationDirectory,
-      fileName: fileName,
+      fileName: destinationDirectory.startsWith('content://') ? 'OmniDrop/$storageCategory/$fileName' : fileName,
       createdDirectories: createdDirectories,
     );
+
+    if (destinationDirectory.startsWith('content://')) {
+      final savedUri = await android_channel.copyFileToTreeAndroid(
+        parentUri: documentUri ?? fallbackPath,
+        sourcePath: cachedPath,
+        fileName: finalName,
+        mimeType: lookupMimeType(finalName) ?? (isImage ? 'image/*' : '*/*'),
+      );
+      await File(cachedPath).delete();
+      return (false, savedUri);
+    }
 
     _logger.info('Moving file from $cachedPath to $fallbackPath');
     await File(cachedPath).rename(fallbackPath);

@@ -628,6 +628,13 @@ Future<void> _handleFileUpload({
   final desiredName = config.fileNameMap[fileId]!;
   final dartFile = file.toDart();
   final isImage = dartFile.fileType == FileType.image;
+  final storageCategory = switch (dartFile.fileType) {
+    FileType.image => 'image',
+    FileType.video => 'video',
+    FileType.audio => 'audio',
+    FileType.apk => 'app',
+    _ => desiredName.contains('/') ? 'folder' : 'other',
+  };
   final shouldSaveToGallery = config.saveToGallery && (isImage || dartFile.fileType == FileType.video);
 
   void emitFailed(Object e) {
@@ -655,6 +662,7 @@ Future<void> _handleFileUpload({
             destinationDirectory: config.destinationDirectory,
             cacheDirectory: config.cacheDirectory,
             fileName: desiredName,
+            storageCategory: storageCategory,
             saveToGallery: shouldSaveToGallery,
             isImage: isImage,
             createdDirectories: session.createdDirectories,
@@ -712,6 +720,7 @@ Future<void> _handleFileUpload({
         cachedPath: target.displayPath,
         destinationDirectory: config.destinationDirectory,
         fileName: desiredName,
+        storageCategory: storageCategory,
         isImage: isImage,
         createdDirectories: session.createdDirectories,
       );

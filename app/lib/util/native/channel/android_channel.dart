@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:dart_mappable/dart_mappable.dart';
 import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
@@ -44,7 +46,25 @@ Future<List<FileInfo>> queryMediaFilesAndroid({required String category}) async 
   return (result ?? []).map((file) => FileInfoMapper.fromJson((file as Map).cast<String, dynamic>())).toList();
 }
 
-Future<String?> pickFolderTreeAndroid() => _methodChannel.invokeMethod<String>('pickFolderTree');
+Future<Uint8List?> loadMediaThumbnailAndroid({required String uri, required String category}) =>
+    _methodChannel.invokeMethod<Uint8List>('loadMediaThumbnail', {'uri': uri, 'category': category});
+
+Future<String?> pickFolderTreeAndroid() => pickStorageTreeAndroid();
+
+Future<String?> pickStorageTreeAndroid({String storage = 'internal'}) =>
+  _methodChannel.invokeMethod<String>('pickStorageTree', {'storage': storage});
+
+Future<String?> getStorageTreeAndroid({String storage = 'internal'}) =>
+  _methodChannel.invokeMethod<String>('getStorageTree', {'storage': storage});
+
+Future<String> getSaveLocationAndroid() async =>
+  await _methodChannel.invokeMethod<String>('getSaveLocation') ?? 'internal';
+
+Future<bool> hasRemovableStorageAndroid() async =>
+  await _methodChannel.invokeMethod<bool>('hasRemovableStorage') ?? false;
+
+Future<bool> setSaveLocationAndroid({required String storage}) async =>
+  await _methodChannel.invokeMethod<bool>('setSaveLocation', {'storage': storage}) ?? false;
 
 Future<List<AndroidBrowseEntry>> listFolderTreeAndroid({required String uri}) async {
   final result = await _methodChannel.invokeMethod<List>('listFolderTree', {'uri': uri});
