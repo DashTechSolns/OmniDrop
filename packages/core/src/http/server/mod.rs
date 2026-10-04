@@ -1,6 +1,7 @@
 pub mod common;
 pub mod internal;
 mod peer_ip;
+pub mod pairing;
 pub mod v2;
 pub mod v3;
 pub mod web;
@@ -12,6 +13,7 @@ use crate::http::server::internal::{InternalConfig, InternalState};
 use crate::http::server::v2::ServerEventV2;
 use crate::http::server::web::{WebConfig, WebShare};
 use crate::http::state::ClientInfo;
+use crate::pairing::PairingSessionManager;
 use common::client_cert_verifier::CustomClientCertVerifier;
 use common::error::AppError;
 use common::response;
@@ -85,6 +87,9 @@ pub struct AppState {
 
     /// State of the v2 protocol endpoints. `None` disables the v2 routes.
     v2: Option<Arc<V2State>>,
+
+    /// Pairing sessions for QR-based device joins.
+    pairing: PairingSessionManager,
 }
 
 impl AppState {
@@ -117,6 +122,7 @@ impl AppState {
                 NonZeroUsize::new(200).unwrap(),
             ))),
             v2,
+            pairing: PairingSessionManager::default(),
         }
     }
 }
@@ -125,6 +131,7 @@ impl AppState {
 /// (as opposed to the event channels which are driven by incoming requests).
 pub struct ServerHandle {
     v2: Option<Arc<V2State>>,
+    pairing: PairingSessionManager,
 
     /// The port the listeners are bound to.
     port: u16,
@@ -139,6 +146,11 @@ pub struct ServerHandle {
 }
 
 impl ServerHandle {
+    /// Returns the pairing manager shared with the request handlers.
+    pub fn pairing_manager(&self) -> PairingSessionManager {
+        self.pairing.clone()
+    }
+
     /// The port the listeners are bound to. Relevant when the server was
     /// started with port 0, where the OS picks the port.
     pub fn port(&self) -> u16 {
@@ -286,6 +298,7 @@ pub async fn start_with_port(
 
     Ok(ServerHandle {
         v2: state.v2.clone(),
+        pairing: state.pairing.clone(),
         port: bound_port,
         ipv6_bound,
         task: Mutex::new(Some(task)),
@@ -628,6 +641,9 @@ async fn handle_request_inner(mut req: Request<Incoming>) -> Result<Response<Box
             }
 
             v2::cancel(req, state, client_info).await
+        }
+        (&Method::POST, "/api/omnidrop/v1/join") => {
+            pairing::join(req.into_body(), state, client_info).await
         }
         // The versioned path is retained for compatibility, but this endpoint is internal.
         (&Method::POST, "/api/localsend/v2/show") => internal::show(req, state).await,

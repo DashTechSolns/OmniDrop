@@ -14,6 +14,7 @@ pub use localsend::http::server::web::{WebI18n, WebPages};
 use localsend::http::state::ClientInfo;
 use localsend::model::discovery::DeviceType;
 use localsend::model::discovery::ProtocolType;
+use localsend::pairing::PairingSessionManager;
 use localsend::model::transfer::{FileContent, FileDto};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -111,6 +112,7 @@ pub enum RsServerEvent {
 
 pub struct RsHttpServer {
     instance: Arc<ServerInstance>,
+    pub(crate) pairing: PairingSessionManager,
     event_rx: Mutex<Option<mpsc::Receiver<ServerEventV2>>>,
     pending_decision: Mutex<Option<(String, oneshot::Sender<PrepareUploadDecisionV2>)>>,
     pending_uploads: Mutex<HashMap<(String, String), oneshot::Sender<FileUploadTarget>>>,
@@ -274,6 +276,7 @@ pub async fn start_server(
     )
     .await?;
 
+    let pairing = handle.pairing_manager();
     let instance = Arc::new(ServerInstance {
         handle,
         stop_tx: Mutex::new(Some(stop_tx)),
@@ -282,6 +285,7 @@ pub async fn start_server(
 
     Ok(RsHttpServer {
         instance,
+        pairing,
         event_rx: Mutex::new(Some(event_rx)),
         pending_decision: Mutex::new(None),
         pending_uploads: Mutex::new(HashMap::new()),

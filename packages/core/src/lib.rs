@@ -5,6 +5,7 @@ pub mod discovery;
 #[cfg(feature = "http")]
 pub mod http;
 pub mod model;
+pub mod pairing;
 #[cfg(feature = "multicast")]
 pub mod multicast;
 pub mod util;
