@@ -240,8 +240,9 @@ class _InAppFileBrowserState extends State<InAppFileBrowser> with Refena {
         ),
         Expanded(
           child: GlassCard(
-            margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+            margin: const EdgeInsets.fromLTRB(4, 4, 4, 8),
             padding: EdgeInsets.zero,
+            radius: glassRadiusCard,
             child: _buildCategoryBody(),
           ),
         ),
@@ -453,12 +454,12 @@ class _InAppFileBrowserState extends State<InAppFileBrowser> with Refena {
         final apps = snapshot.data ?? [];
         if (apps.isEmpty) return _emptyState(icon: Icons.apps_outlined, message: 'No user apps are available.');
         return GridView.builder(
-          padding: const EdgeInsets.all(8),
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 128,
+          padding: const EdgeInsets.all(4),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 4,
             mainAxisSpacing: 4,
             crossAxisSpacing: 4,
-            childAspectRatio: 0.76,
+            mainAxisExtent: 124,
           ),
           itemCount: apps.length,
           itemBuilder: (context, index) {
