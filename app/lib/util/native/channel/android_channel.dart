@@ -145,12 +145,39 @@ Future<void> openWifiSettingsAndroid() async {
   await _methodChannel.invokeMethod<void>('openWifiSettings');
 }
 
+Future<AndroidLocalOnlyHotspot> startLocalOnlyHotspotAndroid({bool prefer5GHz = false}) async {
+  final result = await _methodChannel.invokeMethod<Map>('startLocalOnlyHotspot', {'prefer5GHz': prefer5GHz});
+  final ssid = result?['ssid'];
+  final password = result?['password'];
+  final supports5GHz = result?['supports5GHz'];
+  if (ssid is! String || ssid.isEmpty || password is! String || password.isEmpty || supports5GHz is! bool) {
+    throw const FormatException('Android returned invalid local-only hotspot details.');
+  }
+  return AndroidLocalOnlyHotspot(ssid: ssid, password: password, supports5GHz: supports5GHz);
+}
+
+Future<void> stopLocalOnlyHotspotAndroid() async {
+  await _methodChannel.invokeMethod<void>('stopLocalOnlyHotspot');
+}
+
 Future<void> openAppNotificationSettingsAndroid() async {
   await _methodChannel.invokeMethod<void>('openAppNotificationSettings');
 }
 
 Future<void> openAppPermissionsSettingsAndroid() async {
   await _methodChannel.invokeMethod<void>('openAppPermissionsSettings');
+}
+
+class AndroidLocalOnlyHotspot {
+  final String ssid;
+  final String password;
+  final bool supports5GHz;
+
+  const AndroidLocalOnlyHotspot({
+    required this.ssid,
+    required this.password,
+    required this.supports5GHz,
+  });
 }
 
 @MappableClass()

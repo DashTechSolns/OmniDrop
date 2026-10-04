@@ -10,9 +10,12 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.util.Size
 import android.os.storage.StorageManager
 import android.provider.DocumentsContract
@@ -41,19 +44,27 @@ private const val REQUEST_CODE_PICK_FILE = 3
 private const val REQUEST_CODE_LOCAL_NETWORK = 4
 private const val REQUEST_CODE_PICK_FOLDER_TREE = 5
 private const val REQUEST_CODE_PICK_STORAGE_TREE = 6
+private const val REQUEST_CODE_LOCAL_ONLY_HOTSPOT = 7
 
 // Not available as a constant in compileSdk 36.
 private const val PERMISSION_ACCESS_LOCAL_NETWORK = "android.permission.ACCESS_LOCAL_NETWORK"
+private const val PERMISSION_NEARBY_WIFI_DEVICES = "android.permission.NEARBY_WIFI_DEVICES"
 private const val API_LEVEL_ANDROID_17 = 37
 
 class MainActivity : FlutterActivity() {
     private val mediaQueryExecutor = Executors.newFixedThreadPool(2)
     private var pendingResult: MethodChannel.Result? = null
     private var pendingPermissionResult: MethodChannel.Result? = null
+    private var pendingHotspotResult: MethodChannel.Result? = null
+    private var pendingHotspotPrefer5GHz = false
+    private var hotspotStartResult: MethodChannel.Result? = null
     private var pendingStorageLocation = "internal"
     private var pendingStoragePickerForSetting = false
+    private var localOnlyHotspotReservation: WifiManager.LocalOnlyHotspotReservation? = null
 
     override fun onDestroy() {
+        localOnlyHotspotReservation?.close()
+        localOnlyHotspotReservation = null
         mediaQueryExecutor.shutdown()
         super.onDestroy()
     }
@@ -215,6 +226,22 @@ class MainActivity : FlutterActivity() {
                     result.success(null)
                 }
 
+                "startLocalOnlyHotspot" -> startLocalOnlyHotspot(
+                    prefer5GHz = call.argument<Boolean>("prefer5GHz") == true,
+                    result = result,
+                )
+
+                "stopLocalOnlyHotspot" -> {
+                    pendingHotspotResult?.error("HOTSPOT_CANCELLED", "Hotspot startup was cancelled.", null)
+                    pendingHotspotResult = null
+                    pendingHotspotPrefer5GHz = false
+                    hotspotStartResult?.error("HOTSPOT_CANCELLED", "Hotspot startup was cancelled.", null)
+                    hotspotStartResult = null
+                    localOnlyHotspotReservation?.close()
+                    localOnlyHotspotReservation = null
+                    result.success(null)
+                }
+
                 "openAppNotificationSettings" -> {
                     val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
                     startActivity(intent)
@@ -261,6 +288,7 @@ class MainActivity : FlutterActivity() {
                             runOnUiThread { result.error("QUERY_FAILED", e.message ?: "Could not query media files", null) }
                         }
                     }
+
                 }
 
                 "loadMediaThumbnail" -> {
@@ -286,6 +314,116 @@ class MainActivity : FlutterActivity() {
 
                 else -> result.notImplemented()
             }
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun startLocalOnlyHotspot(prefer5GHz: Boolean, result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            result.error("HOTSPOT_UNSUPPORTED", "Local-only hotspots require Android 8.0 or newer.", null)
+            return
+        }
+        if (localOnlyHotspotReservation != null || pendingHotspotResult != null || hotspotStartResult != null) {
+            result.error("HOTSPOT_ALREADY_STARTED", "A local-only hotspot is already running or starting.", null)
+            return
+        }
+        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            PERMISSION_NEARBY_WIFI_DEVICES
+        } else {
+            android.Manifest.permission.ACCESS_FINE_LOCATION
+        }
+        if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
+            pendingHotspotResult = result
+            pendingHotspotPrefer5GHz = prefer5GHz
+            requestPermissions(arrayOf(permission), REQUEST_CODE_LOCAL_ONLY_HOTSPOT)
+            return
+        }
+
+        val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+        if (wifiManager == null) {
+            result.error("HOTSPOT_UNAVAILABLE", "Wi-Fi is unavailable on this device.", null)
+            return
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && prefer5GHz && !wifiManager.is5GHzBandSupported) {
+            result.error("HOTSPOT_5GHZ_UNSUPPORTED", "This device does not support the 5 GHz Wi-Fi band.", null)
+            return
+        }
+
+        try {
+            hotspotStartResult = result
+            wifiManager.startLocalOnlyHotspot(
+                object : WifiManager.LocalOnlyHotspotCallback() {
+                    override fun onStarted(reservation: WifiManager.LocalOnlyHotspotReservation) {
+                        if (hotspotStartResult !== result) {
+                            reservation.close()
+                            return
+                        }
+                        hotspotStartResult = null
+                        localOnlyHotspotReservation = reservation
+                        val credentials = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            val config = reservation.softApConfiguration
+                            config.ssid to config.passphrase
+                        } else {
+                            @Suppress("DEPRECATION")
+                            val config = reservation.wifiConfiguration
+                            config.SSID to config.preSharedKey
+                        }
+
+                        if (credentials.first.isNullOrEmpty() || credentials.second.isNullOrEmpty()) {
+                            reservation.close()
+                            localOnlyHotspotReservation = null
+                            result.error("HOTSPOT_CREDENTIALS_UNAVAILABLE", "Android did not provide hotspot credentials.", null)
+                            return
+                        }
+
+                        val supports5GHz = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && wifiManager.is5GHzBandSupported
+                        if (prefer5GHz && supports5GHz) {
+                            result.error(
+                                "HOTSPOT_5GHZ_CONFIGURATION_UNAVAILABLE",
+                                "Android does not expose a per-request 5 GHz band setting for local-only hotspots.",
+                                null,
+                            )
+                            reservation.close()
+                            localOnlyHotspotReservation = null
+                            return
+                        }
+
+                        result.success(
+                            mapOf(
+                                "ssid" to credentials.first,
+                                "password" to credentials.second,
+                                "supports5GHz" to supports5GHz,
+                            ),
+                        )
+                    }
+
+                    override fun onStopped() {
+                        localOnlyHotspotReservation = null
+                    }
+
+                    override fun onFailed(reason: Int) {
+                        if (hotspotStartResult !== result) {
+                            return
+                        }
+                        hotspotStartResult = null
+                        val message = when (reason) {
+                            ERROR_NO_CHANNEL -> "No Wi-Fi channel is available to start the hotspot."
+                            ERROR_INCOMPATIBLE_MODE -> "Wi-Fi is in a mode that cannot start a local-only hotspot."
+                            ERROR_TETHERING_DISALLOWED -> "The system does not allow hotspot tethering."
+                            else -> "Android could not start the local-only hotspot."
+                        }
+                        result.error("HOTSPOT_START_FAILED", message, reason)
+                    }
+                },
+                Handler(Looper.getMainLooper()),
+            )
+        } catch (error: SecurityException) {
+            hotspotStartResult = null
+            result.error("HOTSPOT_PERMISSION_DENIED", error.message ?: "Android denied permission to start the hotspot.", null)
+        } catch (error: RuntimeException) {
+            hotspotStartResult = null
+            result.error("HOTSPOT_START_FAILED", error.message ?: "Android could not start the local-only hotspot.", null)
         }
     }
 
@@ -330,6 +468,16 @@ class MainActivity : FlutterActivity() {
         if (requestCode == REQUEST_CODE_LOCAL_NETWORK) {
             pendingPermissionResult?.success(grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED)
             pendingPermissionResult = null
+        } else if (requestCode == REQUEST_CODE_LOCAL_ONLY_HOTSPOT) {
+            val result = pendingHotspotResult
+            val prefer5GHz = pendingHotspotPrefer5GHz
+            pendingHotspotResult = null
+            pendingHotspotPrefer5GHz = false
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED && result != null) {
+                startLocalOnlyHotspot(prefer5GHz = prefer5GHz, result = result)
+            } else {
+                result?.error("HOTSPOT_PERMISSION_DENIED", "Permission to start a local-only hotspot was denied.", null)
+            }
         }
     }
 
