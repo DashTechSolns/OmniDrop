@@ -161,13 +161,25 @@ class MainActivity : FlutterActivity() {
                 "listFolderTree" -> {
                     val uri = call.argument<String>("uri")
                     if (uri == null) result.error("INVALID_ARGUMENT", "Missing folder URI", null)
-                    else result.success(listTreeEntries(Uri.parse(uri)))
+                    else {
+                        try {
+                            result.success(listTreeEntries(Uri.parse(uri)))
+                        } catch (e: Exception) {
+                            result.error("LIST_FOLDER_FAILED", e.message ?: "Could not read this folder", null)
+                        }
+                    }
                 }
 
                 "listFolderTreeFiles" -> {
                     val uri = call.argument<String>("uri")
                     if (uri == null) result.error("INVALID_ARGUMENT", "Missing folder URI", null)
-                    else result.success(listTreeFiles(Uri.parse(uri), ""))
+                    else {
+                        try {
+                            result.success(listTreeFiles(Uri.parse(uri), ""))
+                        } catch (e: Exception) {
+                            result.error("LIST_FOLDER_FAILED", e.message ?: "Could not read this folder", null)
+                        }
+                    }
                 }
 
                 "createDirectory" -> handleCreateDirectory(call, result)
@@ -833,20 +845,51 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun listTreeEntries(uri: Uri): List<Map<String, Any?>> {
-        val root = findTreeDocument(uri) ?: return emptyList()
-        return root.listFiles().map { entry ->
-            mapOf(
-                "name" to (entry.name ?: ""),
-                "size" to entry.length().coerceAtLeast(0L),
-                "uri" to entry.uri.toString(),
-                "lastModified" to entry.lastModified().takeIf { it > 0L }?.toRfc3339(),
-                "isDirectory" to entry.isDirectory,
-            )
+        val treeUri = Uri.parse(uri.toString().substringBefore("/document/"))
+        val treeDocumentId = DocumentsContract.getTreeDocumentId(treeUri)
+        val documentId = if (DocumentsContract.isDocumentUri(this, uri)) {
+            DocumentsContract.getDocumentId(uri)
+        } else {
+            treeDocumentId
+        }
+        require(isWithinTree(treeDocumentId, documentId)) { "Folder URI is outside the granted storage tree" }
+
+        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(uri, documentId)
+        val columns = arrayOf(
+            DocumentsContract.Document.COLUMN_MIME_TYPE,
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_SIZE,
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+        )
+        val cursor = contentResolver.query(childrenUri, columns, null, null, null)
+            ?: throw IllegalStateException("The storage provider could not read this folder")
+
+        return cursor.use { childCursor ->
+            val entries = mutableListOf<Map<String, Any?>>()
+            while (childCursor.moveToNext()) {
+                val mime = childCursor.getString(0)
+                val childDocumentId = childCursor.getString(1)
+                val name = childCursor.getString(2) ?: ""
+                val size = if (childCursor.isNull(3)) 0L else childCursor.getLong(3).coerceAtLeast(0L)
+                val modified = if (childCursor.isNull(4)) null else childCursor.getLong(4).takeIf { it > 0L }?.toRfc3339()
+                val childUri = DocumentsContract.buildDocumentUriUsingTree(uri, childDocumentId)
+                entries.add(
+                    mapOf(
+                        "name" to name,
+                        "size" to size,
+                        "uri" to childUri.toString(),
+                        "lastModified" to modified,
+                        "isDirectory" to (mime == DocumentsContract.Document.MIME_TYPE_DIR),
+                    ),
+                )
+            }
+            entries
         }
     }
 
     private fun listTreeFiles(uri: Uri, parentPath: String): List<Map<String, Any?>> {
-        val root = findTreeDocument(uri) ?: return emptyList()
+        val root = findTreeDocument(uri) ?: throw IllegalStateException("Could not resolve the selected folder")
         return listDocumentFiles(root, parentPath)
     }
 
@@ -895,14 +938,29 @@ class MainActivity : FlutterActivity() {
         } else {
             treeDocumentId
         }
-        if (targetDocumentId != treeDocumentId && !targetDocumentId.startsWith("$treeDocumentId/")) return null
+        if (!isWithinTree(treeDocumentId, targetDocumentId)) return null
 
         var current = DocumentFile.fromTreeUri(this, treeUri) ?: return null
-        val relativePath = targetDocumentId.removePrefix(treeDocumentId).trimStart('/')
+        val relativePath = if (targetDocumentId == treeDocumentId) {
+            ""
+        } else if (treeDocumentId.endsWith(':')) {
+            targetDocumentId.removePrefix(treeDocumentId).trimStart('/')
+        } else {
+            targetDocumentId.removePrefix("$treeDocumentId/").trimStart('/')
+        }
         for (name in relativePath.split('/').filter { it.isNotEmpty() }) {
             current = current.findFile(name) ?: return null
         }
         return current
+    }
+
+    private fun isWithinTree(treeDocumentId: String, targetDocumentId: String): Boolean {
+        if (targetDocumentId == treeDocumentId) return true
+        return if (treeDocumentId.endsWith(':')) {
+            targetDocumentId.startsWith(treeDocumentId)
+        } else {
+            targetDocumentId.startsWith("$treeDocumentId/")
+        }
     }
 
     private fun openGallery() {

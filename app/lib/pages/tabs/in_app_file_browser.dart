@@ -563,7 +563,15 @@ class _InAppFileBrowserState extends State<InAppFileBrowser> with Refena {
           return a.name.toLowerCase().compareTo(b.name.toLowerCase());
         });
         if (snapshot.hasError) {
-          return _emptyState(icon: Icons.folder_off_outlined, message: 'Folder access is unavailable.', action: _grantFolderAccessButton());
+          return _emptyState(
+            icon: Icons.folder_off_outlined,
+            message: "Couldn't read this folder.\n${snapshot.error}",
+            action: TextButton.icon(
+              onPressed: () => setState(() => _treeEntriesFuture = android_channel.listFolderTreeAndroid(uri: folderUri)),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Try again'),
+            ),
+          );
         }
         return Column(
           children: [
