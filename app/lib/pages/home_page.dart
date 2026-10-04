@@ -11,6 +11,8 @@ import 'package:localsend_app/pages/omnidrop_drawer.dart';
 import 'package:localsend_app/pages/tabs/omnidrop_tabs.dart';
 import 'package:localsend_app/pages/tabs/send_tab.dart';
 import 'package:localsend_app/pages/tabs/settings_tab.dart';
+import 'package:localsend_app/provider/network/nearby_devices_provider.dart';
+import 'package:localsend_app/provider/network/scan_facade.dart';
 import 'package:localsend_app/provider/network/send_provider.dart';
 import 'package:localsend_app/provider/selection/selected_sending_files_provider.dart';
 import 'package:localsend_app/pages/tabs/send_tab_vm.dart';
@@ -369,41 +371,131 @@ class _TransferTabState extends State<_TransferTab> with Refena {
       builder: (_) => Consumer(
         builder: (dialogContext, ref) {
           final vm = ref.watch(sendTabVmProvider);
-          return AlertDialog(
-            title: const Text('Choose a device'),
-            content: SizedBox(
-              width: 420,
-              child: vm.nearbyDevices.isEmpty
-                  ? Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text('No nearby devices found.'),
-                        TextButton(
-                          onPressed: () async {
-                            Navigator.of(dialogContext).pop();
-                            await vm.onTapAddress(context);
-                          },
-                          child: const Text('Enter device address'),
-                        ),
-                      ],
-                    )
-                  : SingleChildScrollView(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          for (final device in vm.nearbyDevices)
-                            DeviceListTile(
-                              device: device,
-                              onTap: () async {
-                                Navigator.of(dialogContext).pop();
-                                await vm.onTapDevice(context, device);
-                              },
+          final nearbyState = ref.watch(nearbyDevicesProvider);
+          final devices = vm.nearbyDevices.toList()..sort((a, b) => a.alias.toLowerCase().compareTo(b.alias.toLowerCase()));
+          final isScanning = nearbyState.runningFavoriteScan || nearbyState.runningIps.isNotEmpty;
+          final dialogHeight = (MediaQuery.sizeOf(dialogContext).height * 0.72).clamp(180.0, 600.0).toDouble();
+
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.all(20),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 500),
+              child: SizedBox(
+                height: dialogHeight,
+                child: GlassCard(
+                  margin: EdgeInsets.zero,
+                  padding: EdgeInsets.zero,
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Nearby devices', style: Theme.of(dialogContext).textTheme.titleLarge),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Choose a device on your local network to send the staged files.',
+                                    style: Theme.of(dialogContext).textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
                             ),
-                        ],
+                            if (isScanning)
+                              const Padding(
+                                padding: EdgeInsets.all(12),
+                                child: SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+                              )
+                            else
+                              IconButton(
+                                tooltip: 'Scan again',
+                                onPressed: () async {
+                                  dialogContext.redux(nearbyDevicesProvider).dispatch(ClearFoundDevicesAction());
+                                  await dialogContext.global.dispatchAsync(StartSmartScan());
+                                },
+                                icon: const Icon(Icons.refresh),
+                              ),
+                            IconButton(
+                              tooltip: 'Close',
+                              onPressed: () => Navigator.of(dialogContext).pop(),
+                              icon: const Icon(Icons.close),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
+                      const Divider(height: 1),
+                      Expanded(
+                        child: devices.isEmpty
+                            ? Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(24),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        isScanning ? Icons.wifi_find : Icons.devices_other,
+                                        size: 36,
+                                        color: Theme.of(dialogContext).colorScheme.secondary,
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Text(isScanning ? 'Scanning for nearby devices...' : 'No nearby devices found.'),
+                                      const SizedBox(height: 8),
+                                      TextButton(
+                                        onPressed: () async {
+                                          dialogContext.redux(nearbyDevicesProvider).dispatch(ClearFoundDevicesAction());
+                                          await dialogContext.global.dispatchAsync(StartSmartScan());
+                                        },
+                                        child: const Text('Scan again'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () async {
+                                          Navigator.of(dialogContext).pop();
+                                          await vm.onTapAddress(context);
+                                        },
+                                        child: const Text('Enter device address'),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              )
+                            : ListView.builder(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                itemCount: devices.length,
+                                itemBuilder: (context, index) {
+                                  final device = devices[index];
+                                  return DeviceListTile(
+                                    device: device,
+                                    onTap: () async {
+                                      Navigator.of(dialogContext).pop();
+                                      await vm.onTapDevice(context, device);
+                                    },
+                                  );
+                                },
+                              ),
+                      ),
+                      if (devices.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: TextButton(
+                              onPressed: () async {
+                                Navigator.of(dialogContext).pop();
+                                await vm.onTapAddress(context);
+                              },
+                              child: const Text('Enter device address'),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
             ),
-            actions: [TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Close'))],
           );
         },
       ),
