@@ -5,17 +5,22 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:localsend_app/config/theme.dart';
 import 'package:localsend_app/model/cross_file.dart';
-import 'package:localsend_app/provider/selection/selected_sending_files_provider.dart';
+import 'package:localsend_app/provider/apk_provider.dart';
 import 'package:localsend_app/provider/device_info_provider.dart';
+import 'package:localsend_app/provider/param/cached_apk_provider_param.dart';
+import 'package:localsend_app/provider/selection/selected_sending_files_provider.dart';
 import 'package:localsend_app/util/native/channel/android_channel.dart' as android_channel;
 import 'package:localsend_app/util/native/cross_file_converters.dart';
 import 'package:localsend_app/widget/glass/glass_card.dart';
 import 'package:localsend_isolates/util/file_size_helper.dart';
+import 'package:logging/logging.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:refena_flutter/refena_flutter.dart';
 import 'package:wechat_assets_picker/wechat_assets_picker.dart';
 
 enum _BrowserCategory { downloads, apps, images, videos, audio, documents, text, files }
+
+final _logger = Logger('InAppFileBrowser');
 
 extension on _BrowserCategory {
   String get label => switch (this) {
@@ -49,12 +54,13 @@ class InAppFileBrowser extends StatefulWidget {
 }
 
 class _InAppFileBrowserState extends State<InAppFileBrowser> with Refena {
+  static const _systemFilesPageSize = 100;
   _BrowserCategory _category = _BrowserCategory.downloads;
   final _textController = TextEditingController();
   Future<List<AssetEntity>>? _assetsFuture;
-  Future<List<Application>>? _appsFuture;
   Future<List<android_channel.FileInfo>>? _systemFilesFuture;
   final Map<String, Future<Uint8List?>> _thumbnailFutures = {};
+  final List<android_channel.FileInfo> _additionalSystemFiles = [];
   final Set<String> _selectedAssets = {};
   final Set<String> _selectedTreeFiles = {};
   final Set<String> _selectedTreeFolders = {};
@@ -63,6 +69,10 @@ class _InAppFileBrowserState extends State<InAppFileBrowser> with Refena {
   String? _treeRootUri;
   String? _currentFolderUri;
   Future<List<android_channel.AndroidBrowseEntry>>? _treeEntriesFuture;
+  int _systemFilesOffset = 0;
+  bool _hasMoreSystemFiles = false;
+  bool _loadingMoreSystemFiles = false;
+  bool _systemFilesPageError = false;
   bool _assetSelectionMode = false;
   String _saveLocation = 'internal';
 
@@ -84,6 +94,11 @@ class _InAppFileBrowserState extends State<InAppFileBrowser> with Refena {
       _category = category;
       _assetSelectionMode = false;
       _selectedAssets.clear();
+      _additionalSystemFiles.clear();
+      _systemFilesOffset = 0;
+      _hasMoreSystemFiles = false;
+      _loadingMoreSystemFiles = false;
+      _systemFilesPageError = false;
     });
     if (category == _BrowserCategory.images || category == _BrowserCategory.videos || category == _BrowserCategory.audio) {
       if (defaultTargetPlatform == TargetPlatform.android) {
@@ -91,8 +106,6 @@ class _InAppFileBrowserState extends State<InAppFileBrowser> with Refena {
       } else {
         _assetsFuture = _loadAssets(category);
       }
-    } else if (category == _BrowserCategory.apps) {
-      _appsFuture = DeviceApps.getInstalledApplications(includeSystemApps: false, includeAppIcons: true);
     } else if (category == _BrowserCategory.downloads || category == _BrowserCategory.documents) {
       _systemFilesFuture = _loadSystemFiles(category);
     }
@@ -115,10 +128,66 @@ class _InAppFileBrowserState extends State<InAppFileBrowser> with Refena {
         );
         if (!permission.isAuth) return [];
       }
-      return await android_channel.queryMediaFilesAndroid(category: category.name);
-    } catch (_) {
-      return [];
+      final files = await android_channel.queryMediaFilesAndroid(
+        category: category.name,
+        offset: 0,
+        limit: _systemFilesPageSize,
+      );
+      if (mounted && _category == category) {
+        _systemFilesOffset = files.length;
+        _hasMoreSystemFiles = files.length == _systemFilesPageSize;
+      }
+      return files;
+    } catch (error, stackTrace) {
+      _logger.warning('Could not load ${category.name} files', error, stackTrace);
+      rethrow;
     }
+  }
+
+  Future<void> _loadMoreSystemFiles(_BrowserCategory category) async {
+    if (_loadingMoreSystemFiles || !_hasMoreSystemFiles || category != _category) return;
+    setState(() {
+      _loadingMoreSystemFiles = true;
+      _systemFilesPageError = false;
+    });
+    try {
+      final files = await android_channel.queryMediaFilesAndroid(
+        category: category.name,
+        offset: _systemFilesOffset,
+        limit: _systemFilesPageSize,
+      );
+      if (!mounted || category != _category) return;
+      setState(() {
+        _additionalSystemFiles.addAll(files);
+        _systemFilesOffset += files.length;
+        _hasMoreSystemFiles = files.length == _systemFilesPageSize;
+        _loadingMoreSystemFiles = false;
+      });
+    } catch (error, stackTrace) {
+      _logger.warning('Could not load more ${category.name} files', error, stackTrace);
+      if (!mounted || category != _category) return;
+      setState(() {
+        _loadingMoreSystemFiles = false;
+        _systemFilesPageError = true;
+      });
+    }
+  }
+
+  int get _systemFilesFooterCount => _hasMoreSystemFiles || _loadingMoreSystemFiles || _systemFilesPageError ? 1 : 0;
+
+  Widget _systemFilesFooter(_BrowserCategory category) {
+    if (_systemFilesPageError) {
+      return Center(
+        child: TextButton(
+          onPressed: () => _loadMoreSystemFiles(category),
+          child: const Text('Could not load more files. Tap to retry.'),
+        ),
+      );
+    }
+    if (!_loadingMoreSystemFiles) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadMoreSystemFiles(category));
+    }
+    return const Center(child: CircularProgressIndicator());
   }
 
   Future<void> _initializeStorageTree() async {
@@ -445,13 +514,19 @@ class _InAppFileBrowserState extends State<InAppFileBrowser> with Refena {
   }
 
   Widget _buildAppsBrowser() {
-    final future = _appsFuture;
-    if (future == null) return const Center(child: Text('Open this category to browse installed apps.'));
-    return FutureBuilder<List<Application>>(
-      future: future,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
-        final apps = snapshot.data ?? [];
+    final appsAsync = ref.watch(
+      installedApplicationsProvider(
+        CachedApkProviderParam(
+          includeSystemApps: false,
+          onlyAppsWithLaunchIntent: false,
+          selectMultipleApps: false,
+        ),
+      ),
+    );
+    return appsAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (error, _) => Center(child: Text('Could not load installed apps: $error')),
+      data: (apps) {
         if (apps.isEmpty) return _emptyState(icon: Icons.apps_outlined, message: 'No user apps are available.');
         return GridView.builder(
           padding: const EdgeInsets.all(4),
@@ -481,7 +556,7 @@ class _InAppFileBrowserState extends State<InAppFileBrowser> with Refena {
                           SizedBox.square(
                             dimension: 52,
                             child: app is ApplicationWithIcon
-                                ? Image.memory(app.icon, fit: BoxFit.contain)
+                                ? Image.memory(app.icon, fit: BoxFit.contain, cacheWidth: 156, cacheHeight: 156)
                                 : const Icon(Icons.android, size: 44),
                           ),
                           const SizedBox(height: 7),
@@ -761,21 +836,40 @@ class _InAppFileBrowserState extends State<InAppFileBrowser> with Refena {
       future: future,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
-        final files = snapshot.data ?? [];
+        if (snapshot.hasError) {
+          return _emptyState(
+            icon: _category.icon,
+            message: 'Could not load ${_category.label.toLowerCase()} files: ${snapshot.error}',
+            action: TextButton.icon(
+              onPressed: () => setState(() => _systemFilesFuture = _loadSystemFiles(_category)),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+            ),
+          );
+        }
+        final files = [...?snapshot.data, ..._additionalSystemFiles];
         if (files.isEmpty) {
           return _emptyState(
             icon: _category.icon,
             message: 'No ${_category.label.toLowerCase()} files are available.',
             action: TextButton.icon(
-              onPressed: () => setState(() => _systemFilesFuture = _loadSystemFiles(_category)),
+              onPressed: () => setState(() {
+                _additionalSystemFiles.clear();
+                _systemFilesOffset = 0;
+                _hasMoreSystemFiles = false;
+                _loadingMoreSystemFiles = false;
+                _systemFilesPageError = false;
+                _systemFilesFuture = _loadSystemFiles(_category);
+              }),
               icon: const Icon(Icons.refresh),
               label: const Text('Refresh'),
             ),
           );
         }
         return ListView.builder(
-          itemCount: files.length,
+          itemCount: files.length + _systemFilesFooterCount,
           itemBuilder: (context, index) {
+            if (index >= files.length) return _systemFilesFooter(_category);
             final file = files[index];
             final selected = _isSystemFileSelected(file);
             return ListTile(
@@ -800,13 +894,31 @@ class _InAppFileBrowserState extends State<InAppFileBrowser> with Refena {
       future: future,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
-        final files = snapshot.data ?? [];
+        if (snapshot.hasError) {
+          return _emptyState(
+            icon: _category.icon,
+            message: 'Could not load ${_category.label.toLowerCase()} files: ${snapshot.error}',
+            action: TextButton.icon(
+              onPressed: () => setState(() => _systemFilesFuture = _loadSystemFiles(_category)),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+            ),
+          );
+        }
+        final files = [...?snapshot.data, ..._additionalSystemFiles];
         if (files.isEmpty) {
           return _emptyState(
             icon: _category.icon,
             message: 'No ${_category.label.toLowerCase()} found or access was not granted.',
             action: TextButton.icon(
-              onPressed: () => setState(() => _systemFilesFuture = _loadSystemFiles(_category)),
+              onPressed: () => setState(() {
+                _additionalSystemFiles.clear();
+                _systemFilesOffset = 0;
+                _hasMoreSystemFiles = false;
+                _loadingMoreSystemFiles = false;
+                _systemFilesPageError = false;
+                _systemFilesFuture = _loadSystemFiles(_category);
+              }),
               icon: const Icon(Icons.refresh),
               label: const Text('Check access'),
             ),
@@ -814,8 +926,9 @@ class _InAppFileBrowserState extends State<InAppFileBrowser> with Refena {
         }
         if (_category == _BrowserCategory.audio || _category == _BrowserCategory.videos) {
           return ListView.builder(
-            itemCount: files.length,
+            itemCount: files.length + _systemFilesFooterCount,
             itemBuilder: (context, index) {
+              if (index >= files.length) return _systemFilesFooter(_category);
               final file = files[index];
               final selected = _isSystemFileSelected(file);
               return ListTile(
@@ -851,8 +964,9 @@ class _InAppFileBrowserState extends State<InAppFileBrowser> with Refena {
             crossAxisSpacing: 4,
             mainAxisSpacing: 4,
           ),
-          itemCount: files.length,
+          itemCount: files.length + _systemFilesFooterCount,
           itemBuilder: (context, index) {
+            if (index >= files.length) return _systemFilesFooter(_category);
             final file = files[index];
             final selected = _isSystemFileSelected(file);
             return GestureDetector(
@@ -891,12 +1005,12 @@ class _InAppFileBrowserState extends State<InAppFileBrowser> with Refena {
 
   Widget _buildMediaThumbnail(android_channel.FileInfo file, String category, BoxFit fit, {required IconData fallback}) {
     final key = '$category:${file.uri}';
-    if (!_thumbnailFutures.containsKey(key)) {
-      if (_thumbnailFutures.length >= 64) _thumbnailFutures.clear();
-      _thumbnailFutures[key] = android_channel.loadMediaThumbnailAndroid(uri: file.uri, category: category);
-    }
+    final cachedFuture = _thumbnailFutures.remove(key);
+    final future = cachedFuture ?? android_channel.loadMediaThumbnailAndroid(uri: file.uri, category: category);
+    _thumbnailFutures[key] = future;
+    if (_thumbnailFutures.length > 128) _thumbnailFutures.remove(_thumbnailFutures.keys.first);
     return FutureBuilder<Uint8List?>(
-      future: _thumbnailFutures[key],
+      future: future,
       builder: (context, snapshot) {
         final bytes = snapshot.data;
         if (bytes != null) return Image.memory(bytes, fit: fit, gaplessPlayback: true);

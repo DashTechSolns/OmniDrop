@@ -41,8 +41,11 @@ Future<List<FileInfo>?> pickFilesAndroid() async {
   return result.map((e) => FileInfoMapper.fromJson((e as Map).cast<String, dynamic>())).toList();
 }
 
-Future<List<FileInfo>> queryMediaFilesAndroid({required String category}) async {
-  final result = await _methodChannel.invokeMethod<List>('queryMediaFiles', {'category': category});
+Future<List<FileInfo>> queryMediaFilesAndroid({required String category, int? offset, int? limit}) async {
+  final arguments = <String, Object?>{'category': category};
+  if (offset != null) arguments['offset'] = offset;
+  if (limit != null) arguments['limit'] = limit;
+  final result = await _methodChannel.invokeMethod<List>('queryMediaFiles', arguments);
   return (result ?? []).map((file) => FileInfoMapper.fromJson((file as Map).cast<String, dynamic>())).toList();
 }
 

@@ -9,6 +9,7 @@ import 'package:localsend_app/provider/network/server/server_provider.dart';
 import 'package:localsend_app/provider/settings_provider.dart';
 import 'package:localsend_app/util/native/autostart_helper.dart';
 import 'package:localsend_app/util/native/context_menu_helper.dart';
+import 'package:localsend_app/util/native/platform_check.dart';
 import 'package:localsend_app/util/ui/dynamic_colors.dart';
 import 'package:localsend_app/util/ui/snackbar.dart';
 import 'package:localsend_app/widget/dialogs/custom_color_dialog.dart';
@@ -185,13 +186,15 @@ class _SettingsTabInitAction extends AsyncReduxAction<SettingsTabController, Set
   @override
   Future<SettingsTabVm> reduce() async {
     dispatch(_SettingsTabWatchAction());
-    final autoStartEnabled = await isAutoStartEnabled();
-    final autoStartHidden = await isAutoStartHidden();
-    final showInContextMenu = await isContextMenuEnabled();
+    final status = await Future.wait<bool>([
+      checkPlatformIsDesktop() ? isAutoStartEnabled() : Future.value(false),
+      checkPlatformIsDesktop() ? isAutoStartHidden() : Future.value(false),
+      checkPlatform([TargetPlatform.windows]) ? isContextMenuEnabled() : Future.value(false),
+    ]);
     return state.copyWith(
-      autoStart: autoStartEnabled,
-      autoStartLaunchHidden: autoStartHidden,
-      showInContextMenu: showInContextMenu,
+      autoStart: status[0],
+      autoStartLaunchHidden: status[1],
+      showInContextMenu: status[2],
     );
   }
 }

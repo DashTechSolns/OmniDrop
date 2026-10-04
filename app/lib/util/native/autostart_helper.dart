@@ -79,7 +79,7 @@ Future<bool> isAutoStartEnabled() async {
   final packageInfo = await PackageInfo.fromPlatform();
   switch (defaultTargetPlatform) {
     case TargetPlatform.linux:
-      return File(_getLinuxFilePath(packageInfo.packageName)).existsSync();
+      return File(_getLinuxFilePath(packageInfo.packageName)).exists();
     case TargetPlatform.macOS:
       return await getLaunchAtLogin();
     case TargetPlatform.windows:
@@ -94,10 +94,10 @@ Future<bool> isAutoStartHidden() async {
   switch (defaultTargetPlatform) {
     case TargetPlatform.linux:
       final file = File(_getLinuxFilePath(packageInfo.packageName));
-      if (!file.existsSync()) {
+      if (!await file.exists()) {
         return false;
       }
-      return file.readAsStringSync().contains(startHiddenFlag);
+      return (await file.readAsString()).contains(startHiddenFlag);
     case TargetPlatform.macOS:
       return await getLaunchAtLoginMinimized();
     case TargetPlatform.windows:

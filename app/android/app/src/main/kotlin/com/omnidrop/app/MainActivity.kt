@@ -11,6 +11,7 @@ import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.os.Environment
 import android.util.Size
 import android.os.storage.StorageManager
@@ -30,6 +31,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import java.util.concurrent.Executors
 
 
 private const val CHANNEL = "com.omnidrop.app/localsend"
@@ -45,10 +47,16 @@ private const val PERMISSION_ACCESS_LOCAL_NETWORK = "android.permission.ACCESS_L
 private const val API_LEVEL_ANDROID_17 = 37
 
 class MainActivity : FlutterActivity() {
+    private val mediaQueryExecutor = Executors.newFixedThreadPool(2)
     private var pendingResult: MethodChannel.Result? = null
     private var pendingPermissionResult: MethodChannel.Result? = null
     private var pendingStorageLocation = "internal"
     private var pendingStoragePickerForSetting = false
+
+    override fun onDestroy() {
+        mediaQueryExecutor.shutdown()
+        super.onDestroy()
+    }
 
     /// share_handler drops share intents arriving via onNewIntent while the Dart side
     /// is not subscribed to its media stream yet, which happens when this singleTask
@@ -240,10 +248,18 @@ class MainActivity : FlutterActivity() {
                 }
 
                 "queryMediaFiles" -> {
-                    try {
-                        result.success(queryMediaFiles(call.argument<String>("category") ?: "downloads"))
-                    } catch (e: SecurityException) {
-                        result.error("PERMISSION_DENIED", e.message ?: "Media access was denied", null)
+                    val category = call.argument<String>("category") ?: "downloads"
+                    val offset = (call.argument<Int>("offset") ?: 0).coerceAtLeast(0)
+                    val limit = call.argument<Int>("limit")?.coerceIn(1, 200) ?: 0
+                    mediaQueryExecutor.execute {
+                        try {
+                            val files = queryMediaFiles(category, offset, limit)
+                            runOnUiThread { result.success(files) }
+                        } catch (e: SecurityException) {
+                            runOnUiThread { result.error("PERMISSION_DENIED", e.message ?: "Media access was denied", null) }
+                        } catch (e: Exception) {
+                            runOnUiThread { result.error("QUERY_FAILED", e.message ?: "Could not query media files", null) }
+                        }
                     }
                 }
 
@@ -251,7 +267,12 @@ class MainActivity : FlutterActivity() {
                     val uri = call.argument<String>("uri")
                     val category = call.argument<String>("category")
                     if (uri == null || category == null) result.error("INVALID_ARGUMENT", "Missing URI or category", null)
-                    else result.success(loadMediaThumbnail(Uri.parse(uri), category))
+                    else {
+                        mediaQueryExecutor.execute {
+                            val thumbnail = loadMediaThumbnail(Uri.parse(uri), category)
+                            runOnUiThread { result.success(thumbnail) }
+                        }
+                    }
                 }
 
                 "requestLocalNetworkPermission" -> {
@@ -318,7 +339,7 @@ class MainActivity : FlutterActivity() {
         return Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath
     }
 
-    private fun queryMediaFiles(category: String): List<Map<String, Any?>> {
+    private fun queryMediaFiles(category: String, offset: Int, limit: Int): List<Map<String, Any?>> {
         val documents = category == "documents"
         val collection = when (category) {
             "images" -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
@@ -364,13 +385,25 @@ class MainActivity : FlutterActivity() {
         }
         val sortOrder = "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
         val files = mutableListOf<Map<String, Any?>>()
-        val cursor = contentResolver.query(collection, projection, selection, selectionArgs, sortOrder) ?: return files
+        val cursor = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val queryArgs = Bundle().apply {
+                if (selection != null) putString(ContentResolver.QUERY_ARG_SQL_SELECTION, selection)
+                if (selectionArgs != null) putStringArray(ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, selectionArgs)
+                putString(ContentResolver.QUERY_ARG_SQL_SORT_ORDER, sortOrder)
+                if (limit > 0) putInt(ContentResolver.QUERY_ARG_LIMIT, limit)
+                if (offset > 0) putInt(ContentResolver.QUERY_ARG_OFFSET, offset)
+            }
+            contentResolver.query(collection, projection, queryArgs, null)
+        } else {
+            val paginatedSortOrder = if (limit > 0) "$sortOrder LIMIT $limit OFFSET $offset" else sortOrder
+            contentResolver.query(collection, projection, selection, selectionArgs, paginatedSortOrder)
+        } ?: return files
         cursor.use {
             val idColumn = it.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
             val nameColumn = it.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
             val sizeColumn = it.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
             val modifiedColumn = it.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_MODIFIED)
-            while (it.moveToNext()) {
+            while (it.moveToNext() && (limit <= 0 || files.size < limit)) {
                 val id = it.getLong(idColumn)
                 val modified = it.getLong(modifiedColumn)
                 files.add(
