@@ -42,7 +42,7 @@ jobs:
 
       - name: Commit and push generated bindings
         run: |
-          git add packages/localsend_isolates/lib/rust
+          git add -A -- . ':!pubspec.lock' ':!**/pubspec.lock'
           if ! git diff --cached --quiet; then
             git commit -m "chore: regenerate FRB bindings"
             git push origin main
