@@ -39,9 +39,8 @@ impl RsHttpServer {
     /// Call this before requesting a snapshot: the stream does not replay
     /// events emitted before subscription, while snapshots include every join.
     pub async fn listen_pairing_session(
-        &self,
-        session_token: String,
         sink: StreamSink<RsPairingEvent>,
+        session_token: String,
     ) {
         let mut events = match self.pairing.subscribe(&session_token).await {
             Ok(events) => events,
