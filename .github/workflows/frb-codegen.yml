@@ -1,0 +1,59 @@
+name: Regenerate FRB bindings
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.41.9"
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Install flutter_rust_bridge_codegen
+        run: cargo install flutter_rust_bridge_codegen --version 2.12.0 --locked
+
+      - name: Get dependencies
+        working-directory: packages/localsend_isolates
+        run: flutter pub get
+
+      - name: Generate FRB bindings
+        working-directory: packages/localsend_isolates
+        run: flutter_rust_bridge_codegen generate
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Commit and push generated bindings
+        run: |
+          git add packages/localsend_isolates/lib/rust
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: regenerate FRB bindings"
+            git push origin main
+          else
+            echo "No generated binding changes to commit."
+          fi
+
+      - name: Upload generated bindings
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: frb-generated-bindings
+          path: packages/localsend_isolates/lib/rust
+          if-no-files-found: warn
