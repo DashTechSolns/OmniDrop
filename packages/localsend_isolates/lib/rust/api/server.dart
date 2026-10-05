@@ -6,6 +6,7 @@
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:localsend_isolates/rust/api/model.dart';
+import 'package:localsend_isolates/rust/api/pairing.dart';
 import 'package:localsend_isolates/rust/frb_generated.dart';
 
 part 'server.freezed.dart';
@@ -63,6 +64,9 @@ abstract class RsHttpServer implements RustOpaqueInterface {
   /// the cancellation itself.
   Future<void> cancelSession({required String sessionId});
 
+  /// Creates a short-lived pairing session associated with the sender's device details.
+  Future<String> createPairingSession({required PairingDeviceInfo sender});
+
   /// Fails the pending [RsServerEvent::WebFileDownload] event, e.g. because
   /// the application failed to resolve a source for the file content.
   ///
@@ -77,6 +81,12 @@ abstract class RsHttpServer implements RustOpaqueInterface {
   /// as failed. Does nothing if the upload was already answered.
   Future<void> failFileUpload({required String sessionId, required String fileId});
 
+  /// Closes the session to new joins and returns its final device list.
+  Future<PairingSessionSnapshot> finalizePairingSession({required String sessionToken});
+
+  /// Invalidates a pairing token, e.g. when the pairing UI is dismissed.
+  Future<void> invalidatePairingSession({required String sessionToken});
+
   /// Emits server events until the server is stopped.
   /// Can only be listened to once.
   ///
@@ -86,6 +96,16 @@ abstract class RsHttpServer implements RustOpaqueInterface {
   /// Also returns when the Dart side of the stream is gone (e.g. after a
   /// hot restart), so this call does not keep the server alive forever.
   Stream<RsServerEvent> listen();
+
+  /// Streams receiver joins until the sender finalizes the pairing session.
+  ///
+  /// Call this before requesting a snapshot: the stream does not replay
+  /// events emitted before subscription, while snapshots include every join.
+  static Stream<RsPairingEvent> listenPairingSession({required String sessionToken}) =>
+      RustLib.instance.api.crateApiServerRsHttpServerListenPairingSession(sessionToken: sessionToken);
+
+  /// Returns the sender and all devices that have joined this pairing session.
+  Future<PairingSessionSnapshot> pairingSessionSnapshot({required String sessionToken});
 
   /// Answers the pending [RsServerEvent::WebFileDownload] event with the source
   /// the file content should be read from (either a path or a file descriptor).
@@ -117,6 +137,18 @@ abstract class RsHttpServer implements RustOpaqueInterface {
   /// Passing the accepted file IDs (a subset of the offered files) accepts the request.
   /// Passing `None` declines the request.
   Future<void> respondPrepareUpload({List<String>? acceptedFileIds});
+
+  /// Sends the staged files to every joined device in parallel.
+  ///
+  /// This uses one existing v2 transfer session per recipient. It is
+  /// concurrent-sessions fan-out, not protocol-level multi-recipient fan-out.
+  Stream<RsPairingTransferEvent> sendToJoinedDevices({
+    required String sessionToken,
+    required String privateKey,
+    required String certificate,
+    required List<RsPairingTransferFile> files,
+    String? pin,
+  });
 
   /// Stops the server.
   /// Returns after the listeners are closed, so the port can be bound again.
