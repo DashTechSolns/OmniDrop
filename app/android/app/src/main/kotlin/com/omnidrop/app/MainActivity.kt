@@ -367,6 +367,12 @@ class MainActivity : FlutterActivity() {
                         } else {
                             @Suppress("DEPRECATION")
                             val config = reservation.wifiConfiguration
+                            if (config == null) {
+                                reservation.close()
+                                localOnlyHotspotReservation = null
+                                result.error("HOTSPOT_CREDENTIALS_UNAVAILABLE", "Android did not provide hotspot configuration.", null)
+                                return
+                            }
                             config.SSID to config.preSharedKey
                         }
 
