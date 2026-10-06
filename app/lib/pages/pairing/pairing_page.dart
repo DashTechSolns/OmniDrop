@@ -74,7 +74,8 @@ class _SenderSessionTabState extends State<_SenderSessionTab> with Refena, Widge
   final Map<String, PairingDeviceInfo> _joined = {};
   final Set<String> _removed = {};
   final Set<String> _selected = {};
-  StreamSubscription<HttpServerEvent>? _pairingSubscription;
+  StreamSubscription<HttpServerEvent>? _pairingActionSubscription;
+  StreamSubscription<HttpServerPairingEvent>? _pairingSubscription;
   Timer? _countdownTimer;
   android_channel.AndroidLocalOnlyHotspot? _hotspot;
   String? _sessionToken;
@@ -163,7 +164,19 @@ class _SenderSessionTabState extends State<_SenderSessionTab> with Refena, Widge
         ).toString();
       }
 
-      _pairingSubscription = ref
+      final serverService = ref.notifier(serverProvider);
+      _pairingSubscription = serverService.pairingEvents.where((event) => event.sessionToken == token).listen((event) {
+        if (event.event == null) return;
+        final pairingEvent = event.event!;
+        if (pairingEvent is RsPairingEvent_DeviceJoined) {
+          setState(() {
+            final device = pairingEvent.device.device;
+            _joined[device.fingerprint] = device;
+            _selected.add(device.fingerprint);
+          });
+        }
+      });
+      _pairingActionSubscription = ref
           .redux(parentIsolateProvider)
           .dispatchTakeResult(
             IsolateHttpServerPairingAction(
@@ -172,15 +185,7 @@ class _SenderSessionTabState extends State<_SenderSessionTab> with Refena, Widge
           )
           .listen(
             (event) {
-              if (event is! HttpServerPairingEvent || event.event == null) return;
-              final pairingEvent = event.event!;
-              if (pairingEvent is RsPairingEvent_DeviceJoined) {
-                setState(() {
-                  final device = pairingEvent.device.device;
-                  _joined[device.fingerprint] = device;
-                  _selected.add(device.fingerprint);
-                });
-              }
+              if (event is HttpServerPairingEvent) serverService.forwardPairingEvent(event);
             },
             onError: (Object error) {
               if (mounted) setState(() => _error = error.toString());
@@ -244,6 +249,8 @@ class _SenderSessionTabState extends State<_SenderSessionTab> with Refena, Widge
   Future<void> _releaseResources() async {
     final token = _sessionToken;
     _sessionToken = null;
+    await _pairingActionSubscription?.cancel();
+    _pairingActionSubscription = null;
     await _pairingSubscription?.cancel();
     _pairingSubscription = null;
     if (token != null) {

@@ -72,10 +72,17 @@ class ServerService extends Notifier<ServerState?> {
 
   late final _receiveController = ReceiveController(_serverUtils);
   late final _sendController = SendController(_serverUtils);
+  final _pairingEvents = StreamController<HttpServerPairingEvent>.broadcast(sync: true);
 
   StreamSubscription<HttpServerEvent>? _subscription;
 
   ServerService();
+
+  Stream<HttpServerPairingEvent> get pairingEvents => _pairingEvents.stream;
+
+  void forwardPairingEvent(HttpServerPairingEvent event) {
+    _pairingEvents.add(event);
+  }
 
   @override
   ServerState? init() {
@@ -339,6 +346,8 @@ class ServerService extends Notifier<ServerState?> {
     switch (event) {
       case HttpServerStartedEvent():
         break;
+      case HttpServerPairingEvent():
+        forwardPairingEvent(event);
       case HttpServerRegisterEvent():
         // ignore: discarded_futures
         _receiveController.onRegister(event);

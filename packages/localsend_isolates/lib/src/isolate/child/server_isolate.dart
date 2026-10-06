@@ -617,7 +617,7 @@ Future<void> setupHttpServerIsolate(
                 final sessionToken = pairingTask.sessionToken;
                 if (sessionToken == null) throw StateError('Pairing session token is missing');
                 await for (final event in server.listenPairingSession(sessionToken: sessionToken)) {
-                  emit(HttpServerPairingEvent(event: event));
+                  emit(HttpServerPairingEvent(sessionToken: sessionToken, event: event));
                 }
               case HttpServerPairingOperation.snapshot:
                 final sessionToken = pairingTask.sessionToken;
