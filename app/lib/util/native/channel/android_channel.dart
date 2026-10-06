@@ -150,14 +150,23 @@ Future<AndroidLocalOnlyHotspot> startLocalOnlyHotspotAndroid({bool prefer5GHz = 
   final ssid = result?['ssid'];
   final password = result?['password'];
   final supports5GHz = result?['supports5GHz'];
-  if (ssid is! String || ssid.isEmpty || password is! String || password.isEmpty || supports5GHz is! bool) {
+  final hostIp = result?['hostIp'];
+  if (ssid is! String || ssid.isEmpty || password is! String || password.isEmpty || supports5GHz is! bool || hostIp is! String || hostIp.isEmpty) {
     throw const FormatException('Android returned invalid local-only hotspot details.');
   }
-  return AndroidLocalOnlyHotspot(ssid: ssid, password: password, supports5GHz: supports5GHz);
+  return AndroidLocalOnlyHotspot(ssid: ssid, password: password, supports5GHz: supports5GHz, hostIp: hostIp);
 }
 
 Future<void> stopLocalOnlyHotspotAndroid() async {
   await _methodChannel.invokeMethod<void>('stopLocalOnlyHotspot');
+}
+
+Future<bool> connectToWifiHotspotAndroid({required String ssid, required String password}) async {
+  return await _methodChannel.invokeMethod<bool>('connectToWifiHotspot', {'ssid': ssid, 'password': password}) ?? false;
+}
+
+Future<void> disconnectFromWifiHotspotAndroid() async {
+  await _methodChannel.invokeMethod<void>('disconnectFromWifiHotspot');
 }
 
 Future<void> openAppNotificationSettingsAndroid() async {
@@ -172,11 +181,13 @@ class AndroidLocalOnlyHotspot {
   final String ssid;
   final String password;
   final bool supports5GHz;
+  final String hostIp;
 
   const AndroidLocalOnlyHotspot({
     required this.ssid,
     required this.password,
     required this.supports5GHz,
+    required this.hostIp,
   });
 }
 

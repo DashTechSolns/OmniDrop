@@ -5,6 +5,7 @@ import 'package:localsend_isolates/constants.dart';
 import 'package:localsend_isolates/model/dto/multicast_dto.dart';
 import 'package:localsend_isolates/model/file_type.dart';
 import 'package:localsend_isolates/rust/api/model.dart' show FileDto;
+import 'package:localsend_isolates/rust/api/pairing.dart' show PairingDeviceInfo, PairingSessionSnapshot, RsPairingEvent;
 import 'package:localsend_isolates/rust/api/server.dart';
 import 'package:localsend_isolates/src/isolate/child/main.dart';
 import 'package:localsend_isolates/src/isolate/child/sync_provider.dart';
@@ -53,6 +54,24 @@ class HttpServerStartTask implements BaseHttpServerTask {
 /// Stops the HTTP server.
 /// The stream of this task completes once the server has released the port.
 class HttpServerStopTask implements BaseHttpServerTask {}
+
+enum HttpServerPairingOperation { create, listen, snapshot, finalize, invalidate }
+
+class HttpServerPairingTask implements BaseHttpServerTask {
+  final HttpServerPairingOperation operation;
+  final PairingDeviceInfo? sender;
+  final String? sessionToken;
+  final bool discoverable;
+  final int? avatarIndex;
+
+  const HttpServerPairingTask({
+    required this.operation,
+    this.sender,
+    this.sessionToken,
+    this.discoverable = false,
+    this.avatarIndex,
+  });
+}
 
 /// Everything the server isolate needs to receive the accepted files on its
 /// own, without further involvement of the main isolate.
@@ -169,6 +188,18 @@ sealed class HttpServerEvent {}
 /// The server has been started and is listening.
 /// Always the first event emitted by a [HttpServerStartTask].
 class HttpServerStartedEvent extends HttpServerEvent {}
+
+class HttpServerPairingEvent extends HttpServerEvent {
+  final String? sessionToken;
+  final PairingSessionSnapshot? snapshot;
+  final RsPairingEvent? event;
+
+  HttpServerPairingEvent({
+    this.sessionToken,
+    this.snapshot,
+    this.event,
+  });
+}
 
 /// A device registered itself on this server.
 ///
@@ -564,6 +595,48 @@ Future<void> setupHttpServerIsolate(
               id: task.id,
             ),
           );
+          return;
+        case HttpServerPairingTask pairingTask:
+          final server = ref.read(httpServerProvider);
+          void emit(HttpServerPairingEvent event) {
+            sendToMain(IsolateTaskStreamResult.event(id: task.id, data: event));
+          }
+
+          try {
+            switch (pairingTask.operation) {
+              case HttpServerPairingOperation.create:
+                final sender = pairingTask.sender;
+                if (sender == null) throw StateError('Pairing sender details are missing');
+                final sessionToken = await server.createPairingSession(
+                  sender: sender,
+                  discoverable: pairingTask.discoverable,
+                  avatarIndex: pairingTask.avatarIndex,
+                );
+                emit(HttpServerPairingEvent(sessionToken: sessionToken));
+              case HttpServerPairingOperation.listen:
+                final sessionToken = pairingTask.sessionToken;
+                if (sessionToken == null) throw StateError('Pairing session token is missing');
+                await for (final event in server.listenPairingSession(sessionToken: sessionToken)) {
+                  emit(HttpServerPairingEvent(event: event));
+                }
+              case HttpServerPairingOperation.snapshot:
+                final sessionToken = pairingTask.sessionToken;
+                if (sessionToken == null) throw StateError('Pairing session token is missing');
+                emit(HttpServerPairingEvent(snapshot: await server.pairingSessionSnapshot(sessionToken: sessionToken)));
+              case HttpServerPairingOperation.finalize:
+                final sessionToken = pairingTask.sessionToken;
+                if (sessionToken == null) throw StateError('Pairing session token is missing');
+                emit(HttpServerPairingEvent(snapshot: await server.finalizePairingSession(sessionToken: sessionToken)));
+              case HttpServerPairingOperation.invalidate:
+                final sessionToken = pairingTask.sessionToken;
+                if (sessionToken == null) throw StateError('Pairing session token is missing');
+                await server.invalidatePairingSession(sessionToken: sessionToken);
+            }
+          } catch (error) {
+            sendToMain(IsolateTaskStreamResult.error(id: task.id, error: error.humanErrorMessage));
+            return;
+          }
+          sendToMain(IsolateTaskStreamResult.done(id: task.id));
           return;
         case HttpServerPrepareUploadDecisionTask decisionTask:
           final config = decisionTask.config;

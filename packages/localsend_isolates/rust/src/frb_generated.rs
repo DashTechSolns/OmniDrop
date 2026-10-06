@@ -45,7 +45,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -32184295;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1941637641;
 
 // Section: executor
 
@@ -1007,6 +1007,73 @@ fn wire__crate__api__http__RsHttpClient_cancel_impl(
         },
     )
 }
+fn wire__crate__api__http__RsHttpClient_join_pairing_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "RsHttpClient_join_pairing",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<RsHttpClient>,
+            >>::sse_decode(&mut deserializer);
+            let api_protocol = <crate::api::model::ProtocolType>::sse_decode(&mut deserializer);
+            let api_ip = <String>::sse_decode(&mut deserializer);
+            let api_port = <u16>::sse_decode(&mut deserializer);
+            let api_request =
+                <crate::api::pairing::PairingJoinRequest>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::api::http::RsHttpClientError>(
+                    (move || async move {
+                        let mut api_that_guard = None;
+                        let decode_indices_ =
+                            flutter_rust_bridge::for_generated::lockable_compute_decode_order(
+                                vec![flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                    &api_that, 0, false,
+                                )],
+                            );
+                        for i in decode_indices_ {
+                            match i {
+                                0 => {
+                                    api_that_guard =
+                                        Some(api_that.lockable_decode_async_ref().await)
+                                }
+                                _ => unreachable!(),
+                            }
+                        }
+                        let api_that_guard = api_that_guard.unwrap();
+                        let output_ok = crate::api::http::RsHttpClient::join_pairing(
+                            &*api_that_guard,
+                            api_protocol,
+                            &api_ip,
+                            api_port,
+                            api_request,
+                        )
+                        .await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
 fn wire__crate__api__http__RsHttpClient_prepare_upload_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -1151,6 +1218,70 @@ fn wire__crate__api__http__RsHttpClient_register_impl(
                             &api_ip,
                             api_port,
                             api_payload,
+                        )
+                        .await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__http__RsHttpClient_send_offer_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "RsHttpClient_send_offer",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<RsHttpClient>,
+            >>::sse_decode(&mut deserializer);
+            let api_protocol = <crate::api::model::ProtocolType>::sse_decode(&mut deserializer);
+            let api_ip = <String>::sse_decode(&mut deserializer);
+            let api_port = <u16>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::api::http::RsHttpClientError>(
+                    (move || async move {
+                        let mut api_that_guard = None;
+                        let decode_indices_ =
+                            flutter_rust_bridge::for_generated::lockable_compute_decode_order(
+                                vec![flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                    &api_that, 0, false,
+                                )],
+                            );
+                        for i in decode_indices_ {
+                            match i {
+                                0 => {
+                                    api_that_guard =
+                                        Some(api_that.lockable_decode_async_ref().await)
+                                }
+                                _ => unreachable!(),
+                            }
+                        }
+                        let api_that_guard = api_that_guard.unwrap();
+                        let output_ok = crate::api::http::RsHttpClient::send_offer(
+                            &*api_that_guard,
+                            api_protocol,
+                            &api_ip,
+                            api_port,
                         )
                         .await?;
                         Ok(output_ok)
@@ -1354,6 +1485,8 @@ fn wire__crate__api__server__RsHttpServer_create_pairing_session_impl(
             >>::sse_decode(&mut deserializer);
             let api_sender =
                 <crate::api::pairing::PairingDeviceInfo>::sse_decode(&mut deserializer);
+            let api_discoverable = <bool>::sse_decode(&mut deserializer);
+            let api_avatar_index = <Option<u32>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
                 transform_result_sse::<_, String>(
@@ -1378,6 +1511,8 @@ fn wire__crate__api__server__RsHttpServer_create_pairing_session_impl(
                         let output_ok = crate::api::server::RsHttpServer::create_pairing_session(
                             &*api_that_guard,
                             api_sender,
+                            api_discoverable,
+                            api_avatar_index,
                         )
                         .await?;
                         Ok(output_ok)
@@ -3233,7 +3368,7 @@ fn wire__crate__api__webrtc__connect_impl(
     rust_vec_len_: i32,
     data_len_: i32,
 ) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec,_,_,_>(flutter_rust_bridge::for_generated::TaskInfo{ debug_name: "connect", port: Some(port_), mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal }, move || {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec,_,_,_>(flutter_rust_bridge::for_generated::TaskInfo{ debug_name: "connect", port: Some(port_), mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal }, move || { 
             let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
             let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_sink = <StreamSink<crate::api::webrtc::WsServerMessage,flutter_rust_bridge::for_generated::SseCodec>>::sse_decode(&mut deserializer);
@@ -3839,6 +3974,31 @@ const _: fn() = || {
         let _: u16 = PairingDeviceInfo.port;
         let _: crate::api::model::ProtocolType = PairingDeviceInfo.protocol;
         let _: bool = PairingDeviceInfo.has_web_interface;
+    }
+    {
+        let PairingJoinRequest = None::<crate::api::pairing::PairingJoinRequest>.unwrap();
+        let _: String = PairingJoinRequest.session_token;
+        let _: String = PairingJoinRequest.fingerprint;
+        let _: String = PairingJoinRequest.alias;
+        let _: String = PairingJoinRequest.version;
+        let _: Option<String> = PairingJoinRequest.device_model;
+        let _: Option<crate::api::model::DeviceType> = PairingJoinRequest.device_type;
+        let _: u16 = PairingJoinRequest.port;
+        let _: crate::api::model::ProtocolType = PairingJoinRequest.protocol;
+        let _: bool = PairingJoinRequest.has_web_interface;
+    }
+    {
+        let PairingJoinResponse = None::<crate::api::pairing::PairingJoinResponse>.unwrap();
+        let _: bool = PairingJoinResponse.success;
+        let _: crate::api::pairing::PairingDeviceInfo = PairingJoinResponse.sender;
+    }
+    {
+        let PairingSendOffer = None::<crate::api::pairing::PairingSendOffer>.unwrap();
+        let _: String = PairingSendOffer.alias;
+        let _: Option<u32> = PairingSendOffer.avatar_index;
+        let _: String = PairingSendOffer.session_id;
+        let _: String = PairingSendOffer.join_token;
+        let _: u64 = PairingSendOffer.expires_at_ms;
     }
     {
         let PairingSessionSnapshot = None::<crate::api::pairing::PairingSessionSnapshot>.unwrap();
@@ -4854,6 +5014,19 @@ impl SseDecode for Option<i32> {
     }
 }
 
+impl SseDecode for Option<crate::api::pairing::PairingSendOffer> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::pairing::PairingSendOffer>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<crate::api::webrtc::PinConfig> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -4944,6 +5117,62 @@ impl SseDecode for crate::api::pairing::PairingDeviceInfo {
             port: var_port,
             protocol: var_protocol,
             has_web_interface: var_hasWebInterface,
+        };
+    }
+}
+
+impl SseDecode for crate::api::pairing::PairingJoinRequest {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_sessionToken = <String>::sse_decode(deserializer);
+        let mut var_fingerprint = <String>::sse_decode(deserializer);
+        let mut var_alias = <String>::sse_decode(deserializer);
+        let mut var_version = <String>::sse_decode(deserializer);
+        let mut var_deviceModel = <Option<String>>::sse_decode(deserializer);
+        let mut var_deviceType = <Option<crate::api::model::DeviceType>>::sse_decode(deserializer);
+        let mut var_port = <u16>::sse_decode(deserializer);
+        let mut var_protocol = <crate::api::model::ProtocolType>::sse_decode(deserializer);
+        let mut var_hasWebInterface = <bool>::sse_decode(deserializer);
+        return crate::api::pairing::PairingJoinRequest {
+            session_token: var_sessionToken,
+            fingerprint: var_fingerprint,
+            alias: var_alias,
+            version: var_version,
+            device_model: var_deviceModel,
+            device_type: var_deviceType,
+            port: var_port,
+            protocol: var_protocol,
+            has_web_interface: var_hasWebInterface,
+        };
+    }
+}
+
+impl SseDecode for crate::api::pairing::PairingJoinResponse {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_success = <bool>::sse_decode(deserializer);
+        let mut var_sender = <crate::api::pairing::PairingDeviceInfo>::sse_decode(deserializer);
+        return crate::api::pairing::PairingJoinResponse {
+            success: var_success,
+            sender: var_sender,
+        };
+    }
+}
+
+impl SseDecode for crate::api::pairing::PairingSendOffer {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_alias = <String>::sse_decode(deserializer);
+        let mut var_avatarIndex = <Option<u32>>::sse_decode(deserializer);
+        let mut var_sessionId = <String>::sse_decode(deserializer);
+        let mut var_joinToken = <String>::sse_decode(deserializer);
+        let mut var_expiresAtMs = <u64>::sse_decode(deserializer);
+        return crate::api::pairing::PairingSendOffer {
+            alias: var_alias,
+            avatar_index: var_avatarIndex,
+            session_id: var_sessionId,
+            join_token: var_joinToken,
+            expires_at_ms: var_expiresAtMs,
         };
     }
 }
@@ -5851,210 +6080,219 @@ fn pde_ffi_dispatcher_primary_impl(
         ),
         15 => wire__crate__api__discovery__RsDiscovery_stop_impl(port, ptr, rust_vec_len, data_len),
         16 => wire__crate__api__http__RsHttpClient_cancel_impl(port, ptr, rust_vec_len, data_len),
-        17 => wire__crate__api__http__RsHttpClient_prepare_upload_impl(
+        17 => wire__crate__api__http__RsHttpClient_join_pairing_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        18 => wire__crate__api__http__RsHttpClient_register_impl(port, ptr, rust_vec_len, data_len),
-        19 => wire__crate__api__http__RsHttpClient_upload_impl(port, ptr, rust_vec_len, data_len),
-        20 => wire__crate__api__server__RsHttpServer_cancel_session_impl(
+        18 => wire__crate__api__http__RsHttpClient_prepare_upload_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        21 => wire__crate__api__server__RsHttpServer_create_pairing_session_impl(
+        19 => wire__crate__api__http__RsHttpClient_register_impl(port, ptr, rust_vec_len, data_len),
+        20 => {
+            wire__crate__api__http__RsHttpClient_send_offer_impl(port, ptr, rust_vec_len, data_len)
+        }
+        21 => wire__crate__api__http__RsHttpClient_upload_impl(port, ptr, rust_vec_len, data_len),
+        22 => wire__crate__api__server__RsHttpServer_cancel_session_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        22 => wire__crate__api__server__RsHttpServer_fail_file_download_impl(
+        23 => wire__crate__api__server__RsHttpServer_create_pairing_session_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        23 => wire__crate__api__server__RsHttpServer_fail_file_upload_impl(
+        24 => wire__crate__api__server__RsHttpServer_fail_file_download_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        24 => wire__crate__api__server__RsHttpServer_finalize_pairing_session_impl(
+        25 => wire__crate__api__server__RsHttpServer_fail_file_upload_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        25 => wire__crate__api__server__RsHttpServer_invalidate_pairing_session_impl(
+        26 => wire__crate__api__server__RsHttpServer_finalize_pairing_session_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        26 => wire__crate__api__server__RsHttpServer_listen_impl(port, ptr, rust_vec_len, data_len),
-        27 => wire__crate__api__server__RsHttpServer_listen_pairing_session_impl(
+        27 => wire__crate__api__server__RsHttpServer_invalidate_pairing_session_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        28 => wire__crate__api__server__RsHttpServer_pairing_session_snapshot_impl(
+        28 => wire__crate__api__server__RsHttpServer_listen_impl(port, ptr, rust_vec_len, data_len),
+        29 => wire__crate__api__server__RsHttpServer_listen_pairing_session_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        29 => wire__crate__api__server__RsHttpServer_respond_file_download_impl(
+        30 => wire__crate__api__server__RsHttpServer_pairing_session_snapshot_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        30 => wire__crate__api__server__RsHttpServer_respond_file_upload_impl(
+        31 => wire__crate__api__server__RsHttpServer_respond_file_download_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        31 => wire__crate__api__server__RsHttpServer_respond_prepare_download_impl(
+        32 => wire__crate__api__server__RsHttpServer_respond_file_upload_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        32 => wire__crate__api__server__RsHttpServer_respond_prepare_upload_impl(
+        33 => wire__crate__api__server__RsHttpServer_respond_prepare_download_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        33 => wire__crate__api__server__RsHttpServer_send_to_joined_devices_impl(
+        34 => wire__crate__api__server__RsHttpServer_respond_prepare_upload_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        34 => wire__crate__api__server__RsHttpServer_stop_impl(port, ptr, rust_vec_len, data_len),
-        35 => wire__crate__api__webrtc__RtcFileReceiver_get_file_id_impl(
+        35 => wire__crate__api__server__RsHttpServer_send_to_joined_devices_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        36 => wire__crate__api__webrtc__RtcFileReceiver_receive_impl(
+        36 => wire__crate__api__server__RsHttpServer_stop_impl(port, ptr, rust_vec_len, data_len),
+        37 => wire__crate__api__webrtc__RtcFileReceiver_get_file_id_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        37 => wire__crate__api__webrtc__RtcFileSender_send_impl(port, ptr, rust_vec_len, data_len),
-        38 => wire__crate__api__webrtc__RtcReceiveController_decline_impl(
+        38 => wire__crate__api__webrtc__RtcFileReceiver_receive_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        39 => wire__crate__api__webrtc__RtcReceiveController_listen_error_impl(
+        39 => wire__crate__api__webrtc__RtcFileSender_send_impl(port, ptr, rust_vec_len, data_len),
+        40 => wire__crate__api__webrtc__RtcReceiveController_decline_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        40 => wire__crate__api__webrtc__RtcReceiveController_listen_files_impl(
+        41 => wire__crate__api__webrtc__RtcReceiveController_listen_error_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        41 => wire__crate__api__webrtc__RtcReceiveController_listen_receiving_impl(
+        42 => wire__crate__api__webrtc__RtcReceiveController_listen_files_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        42 => wire__crate__api__webrtc__RtcReceiveController_listen_status_impl(
+        43 => wire__crate__api__webrtc__RtcReceiveController_listen_receiving_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        43 => wire__crate__api__webrtc__RtcReceiveController_send_file_status_impl(
+        44 => wire__crate__api__webrtc__RtcReceiveController_listen_status_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        44 => wire__crate__api__webrtc__RtcReceiveController_send_pin_impl(
+        45 => wire__crate__api__webrtc__RtcReceiveController_send_file_status_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        45 => wire__crate__api__webrtc__RtcReceiveController_send_selection_impl(
+        46 => wire__crate__api__webrtc__RtcReceiveController_send_pin_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        46 => wire__crate__api__webrtc__RtcSendController_listen_error_impl(
+        47 => wire__crate__api__webrtc__RtcReceiveController_send_selection_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        47 => wire__crate__api__webrtc__RtcSendController_listen_selected_files_impl(
+        48 => wire__crate__api__webrtc__RtcSendController_listen_error_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        48 => wire__crate__api__webrtc__RtcSendController_listen_status_impl(
+        49 => wire__crate__api__webrtc__RtcSendController_listen_selected_files_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        49 => wire__crate__api__webrtc__RtcSendController_send_file_impl(
+        50 => wire__crate__api__webrtc__RtcSendController_listen_status_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        50 => wire__crate__api__webrtc__RtcSendController_send_pin_impl(
+        51 => wire__crate__api__webrtc__RtcSendController_send_file_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        51 => wire__crate__api__pairing__StagedTempFiles_default_impl(
+        52 => wire__crate__api__webrtc__RtcSendController_send_pin_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        52 => wire__crate__api__webrtc__connect_impl(port, ptr, rust_vec_len, data_len),
-        55 => wire__crate__api__stream__create_stream_impl(port, ptr, rust_vec_len, data_len),
-        56 => {
+        53 => wire__crate__api__pairing__StagedTempFiles_default_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        54 => wire__crate__api__webrtc__connect_impl(port, ptr, rust_vec_len, data_len),
+        57 => wire__crate__api__stream__create_stream_impl(port, ptr, rust_vec_len, data_len),
+        58 => {
             wire__crate__api__logging__enable_debug_logging_impl(port, ptr, rust_vec_len, data_len)
         }
-        57 => wire__crate__api__crypto__generate_key_pair_impl(port, ptr, rust_vec_len, data_len),
-        58 => wire__crate__api__crypto__generate_security_context_impl(
+        59 => wire__crate__api__crypto__generate_key_pair_impl(port, ptr, rust_vec_len, data_len),
+        60 => wire__crate__api__crypto__generate_security_context_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        59 => wire__crate__api__crypto__hash_file_impl(port, ptr, rust_vec_len, data_len),
-        61 => {
+        61 => wire__crate__api__crypto__hash_file_impl(port, ptr, rust_vec_len, data_len),
+        63 => {
             wire__crate__api__metadata__read_file_metadata_impl(port, ptr, rust_vec_len, data_len)
         }
-        63 => wire__crate__api__discovery__start_discovery_impl(port, ptr, rust_vec_len, data_len),
-        64 => wire__crate__api__server__start_server_impl(port, ptr, rust_vec_len, data_len),
-        65 => wire__crate__api__crypto__verify_cert_impl(port, ptr, rust_vec_len, data_len),
+        65 => wire__crate__api__discovery__start_discovery_impl(port, ptr, rust_vec_len, data_len),
+        66 => wire__crate__api__server__start_server_impl(port, ptr, rust_vec_len, data_len),
+        67 => wire__crate__api__crypto__verify_cert_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -6069,10 +6307,10 @@ fn pde_ffi_dispatcher_sync_impl(
     match func_id {
         2 => wire__crate__api__stream__Dart2RustStreamSink_close_impl(ptr, rust_vec_len, data_len),
         6 => wire__crate__api__cancel__RsCancellationToken_cancel_impl(ptr, rust_vec_len, data_len),
-        53 => wire__crate__api__cancel__create_cancellation_token_impl(ptr, rust_vec_len, data_len),
-        54 => wire__crate__api__http__create_client_impl(ptr, rust_vec_len, data_len),
-        60 => wire__crate__api__filename__is_valid_file_name_impl(ptr, rust_vec_len, data_len),
-        62 => wire__crate__api__filename__sanitize_file_name_impl(ptr, rust_vec_len, data_len),
+        55 => wire__crate__api__cancel__create_cancellation_token_impl(ptr, rust_vec_len, data_len),
+        56 => wire__crate__api__http__create_client_impl(ptr, rust_vec_len, data_len),
+        62 => wire__crate__api__filename__is_valid_file_name_impl(ptr, rust_vec_len, data_len),
+        64 => wire__crate__api__filename__sanitize_file_name_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -6525,6 +6763,79 @@ impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<crate::api::pairing::PairingDe
     for crate::api::pairing::PairingDeviceInfo
 {
     fn into_into_dart(self) -> FrbWrapper<crate::api::pairing::PairingDeviceInfo> {
+        self.into()
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::pairing::PairingJoinRequest> {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.0.session_token.into_into_dart().into_dart(),
+            self.0.fingerprint.into_into_dart().into_dart(),
+            self.0.alias.into_into_dart().into_dart(),
+            self.0.version.into_into_dart().into_dart(),
+            self.0.device_model.into_into_dart().into_dart(),
+            self.0.device_type.into_into_dart().into_dart(),
+            self.0.port.into_into_dart().into_dart(),
+            self.0.protocol.into_into_dart().into_dart(),
+            self.0.has_web_interface.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for FrbWrapper<crate::api::pairing::PairingJoinRequest>
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<crate::api::pairing::PairingJoinRequest>>
+    for crate::api::pairing::PairingJoinRequest
+{
+    fn into_into_dart(self) -> FrbWrapper<crate::api::pairing::PairingJoinRequest> {
+        self.into()
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::pairing::PairingJoinResponse> {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.0.success.into_into_dart().into_dart(),
+            self.0.sender.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for FrbWrapper<crate::api::pairing::PairingJoinResponse>
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<crate::api::pairing::PairingJoinResponse>>
+    for crate::api::pairing::PairingJoinResponse
+{
+    fn into_into_dart(self) -> FrbWrapper<crate::api::pairing::PairingJoinResponse> {
+        self.into()
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::pairing::PairingSendOffer> {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.0.alias.into_into_dart().into_dart(),
+            self.0.avatar_index.into_into_dart().into_dart(),
+            self.0.session_id.into_into_dart().into_dart(),
+            self.0.join_token.into_into_dart().into_dart(),
+            self.0.expires_at_ms.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for FrbWrapper<crate::api::pairing::PairingSendOffer>
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<crate::api::pairing::PairingSendOffer>>
+    for crate::api::pairing::PairingSendOffer
+{
+    fn into_into_dart(self) -> FrbWrapper<crate::api::pairing::PairingSendOffer> {
         self.into()
     }
 }
@@ -8180,6 +8491,16 @@ impl SseEncode for Option<i32> {
     }
 }
 
+impl SseEncode for Option<crate::api::pairing::PairingSendOffer> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::pairing::PairingSendOffer>::sse_encode(value, serializer);
+        }
+    }
+}
+
 impl SseEncode for Option<crate::api::webrtc::PinConfig> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -8252,6 +8573,40 @@ impl SseEncode for crate::api::pairing::PairingDeviceInfo {
         <u16>::sse_encode(self.port, serializer);
         <crate::api::model::ProtocolType>::sse_encode(self.protocol, serializer);
         <bool>::sse_encode(self.has_web_interface, serializer);
+    }
+}
+
+impl SseEncode for crate::api::pairing::PairingJoinRequest {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.session_token, serializer);
+        <String>::sse_encode(self.fingerprint, serializer);
+        <String>::sse_encode(self.alias, serializer);
+        <String>::sse_encode(self.version, serializer);
+        <Option<String>>::sse_encode(self.device_model, serializer);
+        <Option<crate::api::model::DeviceType>>::sse_encode(self.device_type, serializer);
+        <u16>::sse_encode(self.port, serializer);
+        <crate::api::model::ProtocolType>::sse_encode(self.protocol, serializer);
+        <bool>::sse_encode(self.has_web_interface, serializer);
+    }
+}
+
+impl SseEncode for crate::api::pairing::PairingJoinResponse {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.success, serializer);
+        <crate::api::pairing::PairingDeviceInfo>::sse_encode(self.sender, serializer);
+    }
+}
+
+impl SseEncode for crate::api::pairing::PairingSendOffer {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.alias, serializer);
+        <Option<u32>>::sse_encode(self.avatar_index, serializer);
+        <String>::sse_encode(self.session_id, serializer);
+        <String>::sse_encode(self.join_token, serializer);
+        <u64>::sse_encode(self.expires_at_ms, serializer);
     }
 }
 

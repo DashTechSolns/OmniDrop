@@ -2,17 +2,9 @@ use crate::http::server::common::collect_to_json::CollectToJson;
 use crate::http::server::common::error::AppError;
 use crate::http::server::common::response::{BoxedBody, JsonResponse};
 use crate::http::server::{AppState, RequestClientInfo};
-use crate::pairing::{PairingDeviceInfo, PairingJoinRequest, PairingSessionError};
+use crate::pairing::{PairingDeviceInfo, PairingJoinRequest, PairingJoinResponse, PairingSessionError};
 use hyper::body::Incoming;
 use hyper::{Response, StatusCode};
-use serde::Serialize;
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct JoinResponse {
-    success: bool,
-    sender: PairingDeviceInfo,
-}
 
 pub(crate) async fn join(
     body: Incoming,
@@ -50,7 +42,7 @@ pub(crate) async fn join(
     match state.pairing.join(&request.session_token, device).await {
         Ok((snapshot, _)) => Ok(JsonResponse {
             status: StatusCode::OK,
-            body: JoinResponse {
+            body: PairingJoinResponse {
                 success: true,
                 sender: snapshot.sender,
             },
@@ -58,6 +50,18 @@ pub(crate) async fn join(
         .into_response()),
         Err(error) => Err(pairing_error(error)),
     }
+}
+
+pub(crate) async fn send_offer(state: AppState) -> Result<Response<BoxedBody>, AppError> {
+    let Some(offer) = state.pairing.active_send_offer().await else {
+        return Err(AppError::Status(StatusCode::NOT_FOUND));
+    };
+
+    Ok(JsonResponse {
+        status: StatusCode::OK,
+        body: offer,
+    }
+    .into_response())
 }
 
 fn pairing_error(error: PairingSessionError) -> AppError {

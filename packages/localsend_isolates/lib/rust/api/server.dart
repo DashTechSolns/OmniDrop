@@ -65,7 +65,7 @@ abstract class RsHttpServer implements RustOpaqueInterface {
   Future<void> cancelSession({required String sessionId});
 
   /// Creates a short-lived pairing session associated with the sender's device details.
-  Future<String> createPairingSession({required PairingDeviceInfo sender});
+  Future<String> createPairingSession({required PairingDeviceInfo sender, required bool discoverable, int? avatarIndex});
 
   /// Fails the pending [RsServerEvent::WebFileDownload] event, e.g. because
   /// the application failed to resolve a source for the file content.

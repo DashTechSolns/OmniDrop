@@ -46,6 +46,16 @@ pub struct PairingSessionSnapshot {
     pub closed: bool,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PairingSendOffer {
+    pub alias: String,
+    pub avatar_index: Option<u32>,
+    pub session_id: String,
+    pub join_token: String,
+    pub expires_at_ms: u64,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PairingJoinRequest {
@@ -64,6 +74,13 @@ pub struct PairingJoinRequest {
     #[serde(with = "crate::model::discovery::protocol_type_v2")]
     pub protocol: ProtocolType,
     pub has_web_interface: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PairingJoinResponse {
+    pub success: bool,
+    pub sender: PairingDeviceInfo,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -104,6 +121,10 @@ struct PairingSessionState {
 struct PairingSession {
     sender: PairingDeviceInfo,
     created_at: Instant,
+    expires_at: Instant,
+    expires_at_ms: u64,
+    discoverable: bool,
+    avatar_index: Option<u32>,
     joined_devices: HashMap<String, JoinedPairingDevice>,
     closed: bool,
     transfer_started: bool,
@@ -111,10 +132,22 @@ struct PairingSession {
 }
 
 impl PairingSessionManager {
-    pub async fn create(&self, mut sender: PairingDeviceInfo) -> String {
+    pub async fn create(
+        &self,
+        mut sender: PairingDeviceInfo,
+        discoverable: bool,
+        avatar_index: Option<u32>,
+    ) -> String {
         sender.fingerprint = sender.fingerprint.trim().to_ascii_uppercase();
         sender.alias = sender.alias.trim().to_string();
         let now = Instant::now();
+        let expires_at = now + UNUSED_SESSION_TTL;
+        let expires_at_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+            .saturating_add(UNUSED_SESSION_TTL.as_millis())
+            .min(u64::MAX as u128) as u64;
         let mut state = self.inner.lock().await;
         prune_expired(&mut state, now);
         let token = Uuid::new_v4().to_string();
@@ -124,6 +157,10 @@ impl PairingSessionManager {
             PairingSession {
                 sender,
                 created_at: now,
+                expires_at,
+                expires_at_ms,
+                discoverable,
+                avatar_index,
                 joined_devices: HashMap::new(),
                 closed: false,
                 transfer_started: false,
@@ -131,6 +168,24 @@ impl PairingSessionManager {
             },
         );
         token
+    }
+
+    pub async fn active_send_offer(&self) -> Option<PairingSendOffer> {
+        let now = Instant::now();
+        let mut state = self.inner.lock().await;
+        prune_expired(&mut state, now);
+        state
+            .sessions
+            .iter()
+            .filter(|(_, session)| session.discoverable && !session.closed)
+            .max_by_key(|(_, session)| session.created_at)
+            .map(|(token, session)| PairingSendOffer {
+                alias: session.sender.alias.clone(),
+                avatar_index: session.avatar_index,
+                session_id: token.clone(),
+                join_token: token.clone(),
+                expires_at_ms: session.expires_at_ms,
+            })
     }
 
     pub async fn join(
@@ -310,10 +365,7 @@ fn prune_expired(state: &mut PairingSessionState, now: Instant) {
     let expired: Vec<_> = state
         .sessions
         .iter()
-        .filter(|(_, session)| {
-            session.joined_devices.is_empty()
-                && now.duration_since(session.created_at) >= UNUSED_SESSION_TTL
-        })
+        .filter(|(_, session)| now >= session.expires_at)
         .map(|(token, _)| token.clone())
         .collect();
     for token in expired {
@@ -346,7 +398,7 @@ mod tests {
     #[tokio::test]
     async fn concurrent_joins_are_all_recorded() {
         let manager = PairingSessionManager::default();
-        let token = manager.create(device("sender", "Sender")).await;
+        let token = manager.create(device("sender", "Sender"), false, None).await;
         let mut tasks = Vec::new();
         for index in 0..12 {
             let manager = manager.clone();
@@ -369,9 +421,28 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn send_offer_only_exposes_active_open_sessions() {
+        let manager = PairingSessionManager::default();
+        manager.create(device("qr-sender", "QR sender"), false, None).await;
+        let open_token = manager
+            .create(device("open-sender", "Open sender"), true, Some(3))
+            .await;
+
+        let offer = manager.active_send_offer().await.unwrap();
+        assert_eq!(offer.alias, "Open sender");
+        assert_eq!(offer.avatar_index, Some(3));
+        assert_eq!(offer.session_id, open_token);
+        assert_eq!(offer.join_token, open_token);
+        assert!(offer.expires_at_ms > 0);
+
+        manager.finalize(&open_token).await.unwrap();
+        assert!(manager.active_send_offer().await.is_none());
+    }
+
+    #[tokio::test]
     async fn finalizing_stops_new_joins_but_preserves_snapshot() {
         let manager = PairingSessionManager::default();
-        let token = manager.create(device("sender", "Sender")).await;
+        let token = manager.create(device("sender", "Sender"), false, None).await;
         manager
             .join(&token, device("receiver", "Receiver"))
             .await
@@ -393,7 +464,7 @@ mod tests {
     #[tokio::test]
     async fn unused_sessions_expire_lazily_on_access() {
         let manager = PairingSessionManager::default();
-        let token = manager.create(device("sender", "Sender")).await;
+        let token = manager.create(device("sender", "Sender"), false, None).await;
         {
             let mut state = manager.inner.lock().await;
             state.sessions.get_mut(&token).unwrap().created_at =

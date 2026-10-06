@@ -1,4 +1,5 @@
 use crate::api::cancel::RsCancellationToken;
+use crate::api::pairing::{PairingJoinRequest, PairingJoinResponse, PairingSendOffer};
 use crate::api::stream;
 use crate::frb_generated::StreamSink;
 use flutter_rust_bridge::frb;
@@ -42,6 +43,31 @@ pub fn create_client(
 }
 
 impl RsHttpClient {
+    pub async fn send_offer(
+        &self,
+        protocol: ProtocolType,
+        ip: &str,
+        port: u16,
+    ) -> Result<Option<PairingSendOffer>, RsHttpClientError> {
+        self.inner
+            .send_offer(protocol, ip, port)
+            .await
+            .map_err(RsHttpClientError::from)
+    }
+
+    pub async fn join_pairing(
+        &self,
+        protocol: ProtocolType,
+        ip: &str,
+        port: u16,
+        request: PairingJoinRequest,
+    ) -> Result<PairingJoinResponse, RsHttpClientError> {
+        self.inner
+            .join_pairing(protocol, ip, port, request)
+            .await
+            .map_err(RsHttpClientError::from)
+    }
+
     pub async fn register(
         &self,
         protocol: ProtocolType,

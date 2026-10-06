@@ -1,4 +1,5 @@
 import 'package:localsend_isolates/rust/api/model.dart';
+import 'package:localsend_isolates/rust/api/pairing.dart' show PairingDeviceInfo, PairingSessionSnapshot, RsPairingEvent;
 import 'package:localsend_isolates/rust/api/server.dart';
 import 'package:refena_flutter/refena_flutter.dart';
 
@@ -52,6 +53,24 @@ class HttpServerService {
   Future<void> respondPrepareUpload({required List<String>? acceptedFileIds}) async {
     await _requireServer().respondPrepareUpload(acceptedFileIds: acceptedFileIds);
   }
+
+  Future<String> createPairingSession({
+    required PairingDeviceInfo sender,
+    required bool discoverable,
+    int? avatarIndex,
+  }) => _requireServer().createPairingSession(sender: sender, discoverable: discoverable, avatarIndex: avatarIndex);
+
+  Stream<RsPairingEvent> listenPairingSession({required String sessionToken}) =>
+      _requireServer().listenPairingSession(sessionToken: sessionToken);
+
+  Future<PairingSessionSnapshot> pairingSessionSnapshot({required String sessionToken}) =>
+      _requireServer().pairingSessionSnapshot(sessionToken: sessionToken);
+
+  Future<PairingSessionSnapshot> finalizePairingSession({required String sessionToken}) =>
+      _requireServer().finalizePairingSession(sessionToken: sessionToken);
+
+  Future<void> invalidatePairingSession({required String sessionToken}) =>
+      _requireServer().invalidatePairingSession(sessionToken: sessionToken);
 
   /// Answers a pending file upload with the target the file should be saved to
   /// (either a [path] or a [fileDescriptor]).

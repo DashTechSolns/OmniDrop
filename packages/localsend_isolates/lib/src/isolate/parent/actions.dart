@@ -361,6 +361,19 @@ class IsolateHttpServerStopAction extends AsyncReduxAction<IsolateController, Pa
   }
 }
 
+class IsolateHttpServerPairingAction extends ReduxActionWithResult<IsolateController, ParentIsolateState, Stream<HttpServerEvent>> {
+  final HttpServerPairingTask task;
+
+  IsolateHttpServerPairingAction({required this.task});
+
+  @override
+  (ParentIsolateState, Stream<HttpServerEvent>) reduce() {
+    final connection = state.httpServer;
+    if (connection == null) throw StateError('httpServer is not initialized');
+    return (state, connection.sendWrappedTaskAndListenStream(task: task));
+  }
+}
+
 /// Answers a pending [HttpServerPrepareUploadEvent].
 ///
 /// When accepted, the server isolate receives all files on its own and

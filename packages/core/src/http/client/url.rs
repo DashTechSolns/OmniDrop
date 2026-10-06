@@ -16,12 +16,18 @@ pub struct TargetUrl<'a> {
 pub enum ApiVersion {
     V2,
     V3,
+    OmniDropV1,
 }
 
 impl<'a> TargetUrl<'a> {
     pub fn to_string(&self) -> String {
+        let (api, version) = match self.version {
+            ApiVersion::V2 => ("localsend", "v2"),
+            ApiVersion::V3 => ("localsend", "v3"),
+            ApiVersion::OmniDropV1 => ("omnidrop", "v1"),
+        };
         let base = format!(
-            "{}://{}:{}/api/localsend/{}{}",
+            "{}://{}:{}/api/{}/{}{}",
             self.protocol,
             // A scoped IPv6 address (`fe80::1%3`) cannot be represented in a
             // URL and becomes a synthetic host name instead.
@@ -33,10 +39,8 @@ impl<'a> TargetUrl<'a> {
                 },
             },
             self.port,
-            match self.version {
-                ApiVersion::V2 => "v2",
-                ApiVersion::V3 => "v3",
-            },
+            api,
+            version,
             self.path
         );
         if self.params.is_empty() {

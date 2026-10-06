@@ -88,6 +88,105 @@ class PairingDeviceInfo {
           hasWebInterface == other.hasWebInterface;
 }
 
+class PairingJoinRequest {
+  final String sessionToken;
+  final String fingerprint;
+  final String alias;
+  final String version;
+  final String? deviceModel;
+  final DeviceType? deviceType;
+  final int port;
+  final ProtocolType protocol;
+  final bool hasWebInterface;
+
+  const PairingJoinRequest({
+    required this.sessionToken,
+    required this.fingerprint,
+    required this.alias,
+    required this.version,
+    this.deviceModel,
+    this.deviceType,
+    required this.port,
+    required this.protocol,
+    required this.hasWebInterface,
+  });
+
+  @override
+  int get hashCode =>
+      sessionToken.hashCode ^
+      fingerprint.hashCode ^
+      alias.hashCode ^
+      version.hashCode ^
+      deviceModel.hashCode ^
+      deviceType.hashCode ^
+      port.hashCode ^
+      protocol.hashCode ^
+      hasWebInterface.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PairingJoinRequest &&
+          runtimeType == other.runtimeType &&
+          sessionToken == other.sessionToken &&
+          fingerprint == other.fingerprint &&
+          alias == other.alias &&
+          version == other.version &&
+          deviceModel == other.deviceModel &&
+          deviceType == other.deviceType &&
+          port == other.port &&
+          protocol == other.protocol &&
+          hasWebInterface == other.hasWebInterface;
+}
+
+class PairingJoinResponse {
+  final bool success;
+  final PairingDeviceInfo sender;
+
+  const PairingJoinResponse({
+    required this.success,
+    required this.sender,
+  });
+
+  @override
+  int get hashCode => success.hashCode ^ sender.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PairingJoinResponse && runtimeType == other.runtimeType && success == other.success && sender == other.sender;
+}
+
+class PairingSendOffer {
+  final String alias;
+  final int? avatarIndex;
+  final String sessionId;
+  final String joinToken;
+  final BigInt expiresAtMs;
+
+  const PairingSendOffer({
+    required this.alias,
+    this.avatarIndex,
+    required this.sessionId,
+    required this.joinToken,
+    required this.expiresAtMs,
+  });
+
+  @override
+  int get hashCode => alias.hashCode ^ avatarIndex.hashCode ^ sessionId.hashCode ^ joinToken.hashCode ^ expiresAtMs.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PairingSendOffer &&
+          runtimeType == other.runtimeType &&
+          alias == other.alias &&
+          avatarIndex == other.avatarIndex &&
+          sessionId == other.sessionId &&
+          joinToken == other.joinToken &&
+          expiresAtMs == other.expiresAtMs;
+}
+
 class PairingSessionSnapshot {
   final PairingDeviceInfo sender;
   final List<JoinedPairingDevice> joinedDevices;

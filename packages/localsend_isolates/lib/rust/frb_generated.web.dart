@@ -275,6 +275,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PairingDeviceInfo dco_decode_box_autoadd_pairing_device_info(dynamic raw);
 
   @protected
+  PairingJoinRequest dco_decode_box_autoadd_pairing_join_request(dynamic raw);
+
+  @protected
+  PairingSendOffer dco_decode_box_autoadd_pairing_send_offer(dynamic raw);
+
+  @protected
   PinConfig dco_decode_box_autoadd_pin_config(dynamic raw);
 
   @protected
@@ -405,6 +411,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int? dco_decode_opt_box_autoadd_i_32(dynamic raw);
 
   @protected
+  PairingSendOffer? dco_decode_opt_box_autoadd_pairing_send_offer(dynamic raw);
+
+  @protected
   PinConfig? dco_decode_opt_box_autoadd_pin_config(dynamic raw);
 
   @protected
@@ -424,6 +433,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PairingDeviceInfo dco_decode_pairing_device_info(dynamic raw);
+
+  @protected
+  PairingJoinRequest dco_decode_pairing_join_request(dynamic raw);
+
+  @protected
+  PairingJoinResponse dco_decode_pairing_join_response(dynamic raw);
+
+  @protected
+  PairingSendOffer dco_decode_pairing_send_offer(dynamic raw);
 
   @protected
   PairingSessionSnapshot dco_decode_pairing_session_snapshot(dynamic raw);
@@ -781,6 +799,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PairingDeviceInfo sse_decode_box_autoadd_pairing_device_info(SseDeserializer deserializer);
 
   @protected
+  PairingJoinRequest sse_decode_box_autoadd_pairing_join_request(SseDeserializer deserializer);
+
+  @protected
+  PairingSendOffer sse_decode_box_autoadd_pairing_send_offer(SseDeserializer deserializer);
+
+  @protected
   PinConfig sse_decode_box_autoadd_pin_config(SseDeserializer deserializer);
 
   @protected
@@ -913,6 +937,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int? sse_decode_opt_box_autoadd_i_32(SseDeserializer deserializer);
 
   @protected
+  PairingSendOffer? sse_decode_opt_box_autoadd_pairing_send_offer(SseDeserializer deserializer);
+
+  @protected
   PinConfig? sse_decode_opt_box_autoadd_pin_config(SseDeserializer deserializer);
 
   @protected
@@ -932,6 +959,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PairingDeviceInfo sse_decode_pairing_device_info(SseDeserializer deserializer);
+
+  @protected
+  PairingJoinRequest sse_decode_pairing_join_request(SseDeserializer deserializer);
+
+  @protected
+  PairingJoinResponse sse_decode_pairing_join_response(SseDeserializer deserializer);
+
+  @protected
+  PairingSendOffer sse_decode_pairing_send_offer(SseDeserializer deserializer);
 
   @protected
   PairingSessionSnapshot sse_decode_pairing_session_snapshot(SseDeserializer deserializer);
@@ -1337,6 +1373,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_box_autoadd_pairing_device_info(PairingDeviceInfo self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_pairing_join_request(PairingJoinRequest self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_pairing_send_offer(PairingSendOffer self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_pin_config(PinConfig self, SseSerializer serializer);
 
   @protected
@@ -1469,6 +1511,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_opt_box_autoadd_i_32(int? self, SseSerializer serializer);
 
   @protected
+  void sse_encode_opt_box_autoadd_pairing_send_offer(PairingSendOffer? self, SseSerializer serializer);
+
+  @protected
   void sse_encode_opt_box_autoadd_pin_config(PinConfig? self, SseSerializer serializer);
 
   @protected
@@ -1488,6 +1533,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_pairing_device_info(PairingDeviceInfo self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_pairing_join_request(PairingJoinRequest self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_pairing_join_response(PairingJoinResponse self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_pairing_send_offer(PairingSendOffer self, SseSerializer serializer);
 
   @protected
   void sse_encode_pairing_session_snapshot(PairingSessionSnapshot self, SseSerializer serializer);

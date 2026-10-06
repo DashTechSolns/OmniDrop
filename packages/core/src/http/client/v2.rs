@@ -5,6 +5,7 @@ use crate::http::dto_v2::{
     PrepareUploadResponseDtoV2, PrepareUploadResultV2, RegisterDtoV2, RegisterResponseDtoV2,
 };
 use crate::model::discovery::ProtocolType;
+use crate::pairing::{PairingJoinRequest, PairingJoinResponse, PairingSendOffer};
 use futures_util::StreamExt;
 use reqwest::{Response, StatusCode};
 use tokio::io::AsyncWriteExt;
@@ -341,6 +342,62 @@ impl LsHttpClientV2 {
         let body = res.json::<InfoResponseDtoV2>().await?;
 
         Ok(body)
+    }
+
+    pub async fn send_offer(
+        &self,
+        protocol: ProtocolType,
+        ip: &str,
+        port: u16,
+    ) -> Result<Option<PairingSendOffer>, ClientError> {
+        let url = TargetUrl {
+            version: ApiVersion::OmniDropV1,
+            protocol: protocol.as_str(),
+            host: ip.to_string(),
+            port,
+            path: "/send-offer",
+            params: &[],
+        }
+        .to_string();
+
+        let response = self.client.get(&url).send().await?;
+        if response.status() == StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if response.status() != StatusCode::OK {
+            return response.into_error().await;
+        }
+        Ok(Some(response.json::<PairingSendOffer>().await?))
+    }
+
+    pub async fn join_pairing(
+        &self,
+        protocol: ProtocolType,
+        ip: &str,
+        port: u16,
+        request: PairingJoinRequest,
+    ) -> Result<PairingJoinResponse, ClientError> {
+        let url = TargetUrl {
+            version: ApiVersion::OmniDropV1,
+            protocol: protocol.as_str(),
+            host: ip.to_string(),
+            port,
+            path: "/join",
+            params: &[],
+        }
+        .to_string();
+
+        let response = self
+            .client
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .body(serde_json::to_string(&request)?)
+            .send()
+            .await?;
+        if response.status() != StatusCode::OK {
+            return response.into_error().await;
+        }
+        Ok(response.json::<PairingJoinResponse>().await?)
     }
 
     /// Prepares to download files from a sender (Download API).

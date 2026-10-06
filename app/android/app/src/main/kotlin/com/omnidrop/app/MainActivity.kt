@@ -9,8 +9,13 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.Uri
 import android.net.wifi.WifiManager
+import android.net.wifi.WifiNetworkSpecifier
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
@@ -30,6 +35,8 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.io.FileInputStream
 import java.io.ByteArrayOutputStream
+import java.net.Inet4Address
+import java.net.NetworkInterface
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -45,6 +52,7 @@ private const val REQUEST_CODE_LOCAL_NETWORK = 4
 private const val REQUEST_CODE_PICK_FOLDER_TREE = 5
 private const val REQUEST_CODE_PICK_STORAGE_TREE = 6
 private const val REQUEST_CODE_LOCAL_ONLY_HOTSPOT = 7
+private const val REQUEST_CODE_WIFI_HOTSPOT = 8
 
 // Not available as a constant in compileSdk 36.
 private const val PERMISSION_ACCESS_LOCAL_NETWORK = "android.permission.ACCESS_LOCAL_NETWORK"
@@ -61,8 +69,13 @@ class MainActivity : FlutterActivity() {
     private var pendingStorageLocation = "internal"
     private var pendingStoragePickerForSetting = false
     private var localOnlyHotspotReservation: WifiManager.LocalOnlyHotspotReservation? = null
+    private var pendingWifiHotspotResult: MethodChannel.Result? = null
+    private var pendingWifiHotspotSsid: String? = null
+    private var pendingWifiHotspotPassword: String? = null
+    private var wifiHotspotNetworkCallback: ConnectivityManager.NetworkCallback? = null
 
     override fun onDestroy() {
+        disconnectFromWifiHotspot()
         localOnlyHotspotReservation?.close()
         localOnlyHotspotReservation = null
         mediaQueryExecutor.shutdown()
@@ -242,6 +255,17 @@ class MainActivity : FlutterActivity() {
                     result.success(null)
                 }
 
+                "connectToWifiHotspot" -> connectToWifiHotspot(
+                    ssid = call.argument<String>("ssid") ?: "",
+                    password = call.argument<String>("password") ?: "",
+                    result = result,
+                )
+
+                "disconnectFromWifiHotspot" -> {
+                    disconnectFromWifiHotspot()
+                    result.success(null)
+                }
+
                 "openAppNotificationSettings" -> {
                     val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
                     startActivity(intent)
@@ -395,11 +419,20 @@ class MainActivity : FlutterActivity() {
                             return
                         }
 
+                        val hostIp = findHotspotHostIp()
+                        if (hostIp == null) {
+                            result.error("HOTSPOT_ADDRESS_UNAVAILABLE", "Android did not expose a reachable hotspot address.", null)
+                            reservation.close()
+                            localOnlyHotspotReservation = null
+                            return
+                        }
+
                         result.success(
                             mapOf(
                                 "ssid" to credentials.first,
                                 "password" to credentials.second,
                                 "supports5GHz" to supports5GHz,
+                                "hostIp" to hostIp,
                             ),
                         )
                     }
@@ -431,6 +464,105 @@ class MainActivity : FlutterActivity() {
             hotspotStartResult = null
             result.error("HOTSPOT_START_FAILED", error.message ?: "Android could not start the local-only hotspot.", null)
         }
+    }
+
+    private fun findHotspotHostIp(): String? {
+        val networkInterfaces = try {
+            NetworkInterface.getNetworkInterfaces()
+        } catch (_: Exception) {
+            return null
+        } ?: return null
+        val candidates = mutableListOf<String>()
+        while (networkInterfaces.hasMoreElements()) {
+            val networkInterface = networkInterfaces.nextElement()
+            val name = networkInterface.name.lowercase(Locale.ROOT)
+            if (!name.startsWith("wlan") && !name.startsWith("ap") && !name.startsWith("swlan")) continue
+            val addresses = networkInterface.inetAddresses
+            while (addresses.hasMoreElements()) {
+                val address = addresses.nextElement()
+                if (address is Inet4Address && !address.isLoopbackAddress && address.isSiteLocalAddress) {
+                    candidates.add(address.hostAddress ?: continue)
+                }
+            }
+        }
+        return candidates.firstOrNull { it.endsWith(".1") } ?: candidates.singleOrNull()
+    }
+
+    private fun connectToWifiHotspot(ssid: String, password: String, result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            result.success(false)
+            return
+        }
+        if (ssid.isBlank() || password.isBlank()) {
+            result.error("INVALID_ARGUMENT", "Wi-Fi name and password are required.", null)
+            return
+        }
+        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            PERMISSION_NEARBY_WIFI_DEVICES
+        } else {
+            android.Manifest.permission.ACCESS_FINE_LOCATION
+        }
+        if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
+            pendingWifiHotspotResult = result
+            pendingWifiHotspotSsid = ssid
+            pendingWifiHotspotPassword = password
+            requestPermissions(arrayOf(permission), REQUEST_CODE_WIFI_HOTSPOT)
+            return
+        }
+
+        val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        if (connectivityManager == null) {
+            result.success(false)
+            return
+        }
+        disconnectFromWifiHotspot()
+        try {
+            val specifier = WifiNetworkSpecifier.Builder().setSsid(ssid).setWpa2Passphrase(password).build()
+            val request = NetworkRequest.Builder()
+                .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                .removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .setNetworkSpecifier(specifier)
+                .build()
+            val callback = object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    connectivityManager.bindProcessToNetwork(network)
+                    wifiHotspotNetworkCallback = this
+                    pendingWifiHotspotResult = null
+                    result.success(true)
+                }
+
+                override fun onUnavailable() {
+                    wifiHotspotNetworkCallback = null
+                    pendingWifiHotspotResult = null
+                    result.success(false)
+                }
+            }
+            pendingWifiHotspotResult = result
+            connectivityManager.requestNetwork(request, callback)
+            wifiHotspotNetworkCallback = callback
+        } catch (error: SecurityException) {
+            pendingWifiHotspotResult = null
+            result.success(false)
+        } catch (error: RuntimeException) {
+            pendingWifiHotspotResult = null
+            result.success(false)
+        }
+    }
+
+    private fun disconnectFromWifiHotspot() {
+        val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        wifiHotspotNetworkCallback?.let { callback ->
+            try {
+                connectivityManager?.unregisterNetworkCallback(callback)
+            } catch (_: IllegalArgumentException) {
+            }
+        }
+        wifiHotspotNetworkCallback = null
+        connectivityManager?.bindProcessToNetwork(null)
+        pendingWifiHotspotResult?.success(false)
+        pendingWifiHotspotResult = null
+        pendingWifiHotspotSsid = null
+        pendingWifiHotspotPassword = null
     }
 
     private fun shareInstalledApk(): Boolean {
@@ -483,6 +615,18 @@ class MainActivity : FlutterActivity() {
                 startLocalOnlyHotspot(prefer5GHz = prefer5GHz, result = result)
             } else {
                 result?.error("HOTSPOT_PERMISSION_DENIED", "Permission to start a local-only hotspot was denied.", null)
+            }
+        } else if (requestCode == REQUEST_CODE_WIFI_HOTSPOT) {
+            val result = pendingWifiHotspotResult
+            val ssid = pendingWifiHotspotSsid
+            val password = pendingWifiHotspotPassword
+            pendingWifiHotspotResult = null
+            pendingWifiHotspotSsid = null
+            pendingWifiHotspotPassword = null
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED && result != null && ssid != null && password != null) {
+                connectToWifiHotspot(ssid = ssid, password = password, result = result)
+            } else {
+                result?.success(false)
             }
         }
     }

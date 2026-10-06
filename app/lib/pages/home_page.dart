@@ -5,29 +5,31 @@ import 'package:flutter/material.dart';
 import 'package:localsend_app/config/init.dart';
 import 'package:localsend_app/config/theme.dart';
 import 'package:localsend_app/gen/strings.g.dart';
-import 'package:localsend_app/pages/home_page_controller.dart';
 import 'package:localsend_app/pages/copy_phone_page.dart';
+import 'package:localsend_app/pages/home_page_controller.dart';
 import 'package:localsend_app/pages/omnidrop_drawer.dart';
+import 'package:localsend_app/pages/pairing/pairing_page.dart';
+import 'package:localsend_app/pages/pairing/pairing_strings.dart';
 import 'package:localsend_app/pages/tabs/omnidrop_tabs.dart';
 import 'package:localsend_app/pages/tabs/send_tab.dart';
+import 'package:localsend_app/pages/tabs/send_tab_vm.dart';
 import 'package:localsend_app/pages/tabs/settings_tab.dart';
 import 'package:localsend_app/provider/network/nearby_devices_provider.dart';
 import 'package:localsend_app/provider/network/scan_facade.dart';
 import 'package:localsend_app/provider/network/send_provider.dart';
 import 'package:localsend_app/provider/selection/selected_sending_files_provider.dart';
-import 'package:localsend_app/pages/tabs/send_tab_vm.dart';
-import 'package:localsend_app/util/native/cross_file_converters.dart';
 import 'package:localsend_app/util/native/channel/android_channel.dart' as android_channel;
-import 'package:localsend_app/util/native/file_picker.dart';
+import 'package:localsend_app/util/native/cross_file_converters.dart';
+import 'package:localsend_app/widget/animated_press.dart';
 import 'package:localsend_app/widget/dialogs/add_file_dialog.dart';
 import 'package:localsend_app/widget/dialogs/receive_pairing_dialog.dart';
-import 'package:localsend_app/widget/animated_press.dart';
-import 'package:localsend_app/widget/omnidrop_logo.dart';
 import 'package:localsend_app/widget/glass/glass_card.dart';
 import 'package:localsend_app/widget/list_tile/device_list_tile.dart';
+import 'package:localsend_app/widget/omnidrop_logo.dart';
 import 'package:localsend_app/widget/responsive_builder.dart';
 import 'package:localsend_isolates/model/session_status.dart';
 import 'package:refena_flutter/refena_flutter.dart';
+import 'package:routerino/routerino.dart';
 
 enum HomeTab {
   webDrop(Icons.language),
@@ -419,6 +421,14 @@ class _TransferTabState extends State<_TransferTab> with Refena {
                                 },
                                 icon: const Icon(Icons.refresh),
                               ),
+                            IconButton(
+                              tooltip: PairingStrings.pairFiles,
+                              onPressed: () async {
+                                Navigator.of(dialogContext).pop();
+                                await context.push(() => const PairingPage());
+                              },
+                              icon: const Icon(Icons.qr_code_2),
+                            ),
                             IconButton(
                               tooltip: 'Close',
                               onPressed: () => Navigator.of(dialogContext).pop(),

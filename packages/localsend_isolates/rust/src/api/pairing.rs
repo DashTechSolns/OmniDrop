@@ -6,8 +6,37 @@ use localsend::http::client::{LsHttpClient, LsHttpClientVersion};
 use localsend::http::dto::{PrepareUploadRequestDto, RegisterDto};
 use localsend::model::transfer::FileContent;
 pub use localsend::pairing::{
-    JoinedPairingDevice, PairingDeviceInfo, PairingSessionEvent, PairingSessionSnapshot,
+    JoinedPairingDevice, PairingDeviceInfo, PairingJoinRequest, PairingJoinResponse,
+    PairingSendOffer, PairingSessionEvent, PairingSessionSnapshot,
 };
+
+#[frb(mirror(PairingSendOffer))]
+pub struct _PairingSendOffer {
+    pub alias: String,
+    pub avatar_index: Option<u32>,
+    pub session_id: String,
+    pub join_token: String,
+    pub expires_at_ms: u64,
+}
+
+#[frb(mirror(PairingJoinRequest))]
+pub struct _PairingJoinRequest {
+    pub session_token: String,
+    pub fingerprint: String,
+    pub alias: String,
+    pub version: String,
+    pub device_model: Option<String>,
+    pub device_type: Option<DeviceType>,
+    pub port: u16,
+    pub protocol: ProtocolType,
+    pub has_web_interface: bool,
+}
+
+#[frb(mirror(PairingJoinResponse))]
+pub struct _PairingJoinResponse {
+    pub success: bool,
+    pub sender: PairingDeviceInfo,
+}
 use std::collections::HashMap;
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
@@ -23,6 +52,8 @@ impl RsHttpServer {
     pub async fn create_pairing_session(
         &self,
         sender: PairingDeviceInfo,
+        discoverable: bool,
+        avatar_index: Option<u32>,
     ) -> Result<String, String> {
         if sender.fingerprint.trim().is_empty()
             || sender.alias.trim().is_empty()
@@ -31,7 +62,7 @@ impl RsHttpServer {
         {
             return Err("Sender identity and connection details must be complete".to_string());
         }
-        Ok(self.pairing.create(sender).await)
+        Ok(self.pairing.create(sender, discoverable, avatar_index).await)
     }
 
     /// Streams receiver joins until the sender finalizes the pairing session.

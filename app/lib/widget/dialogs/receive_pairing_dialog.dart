@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:localsend_app/pages/pairing/pairing_page.dart';
 import 'package:localsend_app/util/qr_payload_parser.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -9,7 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 Future<void> showReceivePairingDialog(BuildContext context, {bool allowWebDropLinks = false}) async {
   await showDialog<void>(
     context: context,
-    builder: (_) => _ReceivePairingDialog(allowWebDropLinks: allowWebDropLinks),
+    builder: (_) => PairingReceiveDialog(allowWebDropLinks: allowWebDropLinks),
   );
 }
 

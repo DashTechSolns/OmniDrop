@@ -7,6 +7,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:localsend_isolates/rust/api/cancel.dart';
 import 'package:localsend_isolates/rust/api/model.dart';
+import 'package:localsend_isolates/rust/api/pairing.dart';
 import 'package:localsend_isolates/rust/api/stream.dart';
 import 'package:localsend_isolates/rust/frb_generated.dart';
 
@@ -39,6 +40,13 @@ RsHttpClient createClient({
 abstract class RsHttpClient implements RustOpaqueInterface {
   Future<void> cancel({required ProtocolType protocol, required String ip, required int port, required String sessionId});
 
+  Future<PairingJoinResponse> joinPairing({
+    required ProtocolType protocol,
+    required String ip,
+    required int port,
+    required PairingJoinRequest request,
+  });
+
   Future<PrepareUploadResult> prepareUpload({
     required ProtocolType protocol,
     required String ip,
@@ -55,6 +63,8 @@ abstract class RsHttpClient implements RustOpaqueInterface {
     required int port,
     required RegisterDto payload,
   });
+
+  Future<PairingSendOffer?> sendOffer({required ProtocolType protocol, required String ip, required int port});
 
   /// Uploads a single file, emitting [RsUploadEvent]s on [sink].
   ///

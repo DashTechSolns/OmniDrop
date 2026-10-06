@@ -645,6 +645,7 @@ async fn handle_request_inner(mut req: Request<Incoming>) -> Result<Response<Box
         (&Method::POST, "/api/omnidrop/v1/join") => {
             pairing::join(req.into_body(), state, client_info).await
         }
+        (&Method::GET, "/api/omnidrop/v1/send-offer") => pairing::send_offer(state).await,
         // The versioned path is retained for compatibility, but this endpoint is internal.
         (&Method::POST, "/api/localsend/v2/show") => internal::show(req, state).await,
         (&Method::POST, "/api/localsend/v3/nonce") => {
