@@ -7,13 +7,17 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:localsend_isolates/rust/api/model.dart';
 import 'package:localsend_isolates/rust/frb_generated.dart';
-import 'package:localsend_isolates/rust/lib.dart';
 
 part 'pairing.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `prepare_transfer_files`, `send_to_device`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `PreparedTransferFile`, `PreparedTransferSet`, `TransferSource`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `drop`
+
+// Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<StagedTempFiles>>
+abstract class StagedTempFiles implements RustOpaqueInterface {
+  static Future<StagedTempFiles> default_() => RustLib.instance.api.crateApiPairingStagedTempFilesDefault();
+}
 
 class JoinedPairingDevice {
   final PairingDeviceInfo device;
@@ -163,20 +167,4 @@ class RsPairingTransferFile {
           path == other.path &&
           bytes == other.bytes &&
           fileDescriptor == other.fileDescriptor;
-}
-
-class StagedTempFiles {
-  final List<PathBuf> paths;
-
-  const StagedTempFiles({
-    required this.paths,
-  });
-
-  static Future<StagedTempFiles> default_() => RustLib.instance.api.crateApiPairingStagedTempFilesDefault();
-
-  @override
-  int get hashCode => paths.hashCode;
-
-  @override
-  bool operator ==(Object other) => identical(this, other) || other is StagedTempFiles && runtimeType == other.runtimeType && paths == other.paths;
 }

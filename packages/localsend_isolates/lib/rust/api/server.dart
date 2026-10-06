@@ -101,8 +101,7 @@ abstract class RsHttpServer implements RustOpaqueInterface {
   ///
   /// Call this before requesting a snapshot: the stream does not replay
   /// events emitted before subscription, while snapshots include every join.
-  static Stream<RsPairingEvent> listenPairingSession({required String sessionToken}) =>
-      RustLib.instance.api.crateApiServerRsHttpServerListenPairingSession(sessionToken: sessionToken);
+  Stream<RsPairingEvent> listenPairingSession({required String sessionToken});
 
   /// Returns the sender and all devices that have joined this pairing session.
   Future<PairingSessionSnapshot> pairingSessionSnapshot({required String sessionToken});

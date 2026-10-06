@@ -3,9 +3,9 @@ use crate::api::server::RsHttpServer;
 use crate::frb_generated::StreamSink;
 use flutter_rust_bridge::frb;
 use localsend::http::client::{LsHttpClient, LsHttpClientVersion};
-use localsend::http::dto_v2::{PrepareUploadRequestDtoV2, RegisterDtoV2};
+use localsend::http::dto::{PrepareUploadRequestDto, RegisterDto};
 use localsend::model::transfer::FileContent;
-use localsend::pairing::{
+pub use localsend::pairing::{
     JoinedPairingDevice, PairingDeviceInfo, PairingSessionEvent, PairingSessionSnapshot,
 };
 use std::collections::HashMap;
@@ -39,6 +39,7 @@ impl RsHttpServer {
     /// Call this before requesting a snapshot: the stream does not replay
     /// events emitted before subscription, while snapshots include every join.
     pub async fn listen_pairing_session(
+        &self,
         sink: StreamSink<RsPairingEvent>,
         session_token: String,
     ) {
@@ -221,17 +222,17 @@ async fn send_to_device(
     )
     .map_err(|error| error.to_string())?;
 
-    let sender_info = RegisterDtoV2 {
+    let sender_info = RegisterDto {
         alias: sender.alias,
         version: sender.version,
         device_model: sender.device_model,
         device_type: sender.device_type,
-        fingerprint: sender.fingerprint,
+        token: sender.fingerprint,
         port: sender.port,
         protocol: sender.protocol,
-        download: sender.has_web_interface,
+        has_web_interface: sender.has_web_interface,
     };
-    let request = PrepareUploadRequestDtoV2 {
+    let request = PrepareUploadRequestDto {
         info: sender_info,
         files: files
             .iter()
@@ -394,9 +395,11 @@ async fn spool_file_descriptor(
     Ok(path.to_string_lossy().into_owned())
 }
 
+#[frb(opaque)]
 #[derive(Default)]
-struct StagedTempFiles {
-    paths: Vec<std::path::PathBuf>,
+pub struct StagedTempFiles {
+    #[frb(ignore)]
+    pub paths: Vec<std::path::PathBuf>,
 }
 
 impl Drop for StagedTempFiles {
