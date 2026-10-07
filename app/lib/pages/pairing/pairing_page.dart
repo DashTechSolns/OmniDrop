@@ -70,12 +70,13 @@ class _SenderSessionTab extends StatefulWidget {
   State<_SenderSessionTab> createState() => _SenderSessionTabState();
 }
 
-class _SenderSessionTabState extends State<_SenderSessionTab> with Refena, WidgetsBindingObserver {
+class _SenderSessionTabState extends State<_SenderSessionTab> with Refena {
   final Map<String, PairingDeviceInfo> _joined = {};
   final Set<String> _removed = {};
   final Set<String> _selected = {};
   StreamSubscription<HttpServerEvent>? _pairingActionSubscription;
   StreamSubscription<HttpServerPairingEvent>? _pairingSubscription;
+  StreamSubscription<void>? _pairingDisconnectSubscription;
   Timer? _countdownTimer;
   android_channel.AndroidLocalOnlyHotspot? _hotspot;
   String? _sessionToken;
@@ -89,17 +90,20 @@ class _SenderSessionTabState extends State<_SenderSessionTab> with Refena, Widge
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
+    _listenForNativeDisconnect();
     if (!widget.discoverable) unawaited(_startSession());
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed && _sessionToken != null) unawaited(_stopSession());
+  void _listenForNativeDisconnect() {
+    if (widget.discoverable || _pairingDisconnectSubscription != null) return;
+    _pairingDisconnectSubscription = android_channel.pairingDisconnectEvents.listen((_) {
+      unawaited(_stopSession(stopHotspot: false));
+    });
   }
 
   Future<void> _startSession() async {
     if (_starting || _sessionToken != null) return;
+    _listenForNativeDisconnect();
     setState(() {
       _starting = true;
       _error = null;
@@ -166,7 +170,7 @@ class _SenderSessionTabState extends State<_SenderSessionTab> with Refena, Widge
 
       final serverService = ref.notifier(serverProvider);
       _pairingSubscription = serverService.pairingEvents.where((event) => event.sessionToken == token).listen((event) {
-        if (event.event == null) return;
+        if (!mounted || event.event == null) return;
         final pairingEvent = event.event!;
         if (pairingEvent is RsPairingEvent_DeviceJoined) {
           setState(() {
@@ -195,12 +199,14 @@ class _SenderSessionTabState extends State<_SenderSessionTab> with Refena, Widge
       _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
         final remaining = _expiresAt!.difference(DateTime.now()).inSeconds;
         if (remaining <= 0) {
-          setState(() {
-            _remainingSeconds = 0;
-            _error = PairingStrings.expired;
-          });
+          if (mounted) {
+            setState(() {
+              _remainingSeconds = 0;
+              _error = PairingStrings.expired;
+            });
+          }
           unawaited(_stopSession());
-        } else {
+        } else if (mounted) {
           setState(() => _remainingSeconds = remaining);
         }
       });
@@ -230,10 +236,10 @@ class _SenderSessionTabState extends State<_SenderSessionTab> with Refena, Widge
     });
   }
 
-  Future<void> _stopSession() async {
+  Future<void> _stopSession({bool stopHotspot = true}) async {
     _countdownTimer?.cancel();
     _countdownTimer = null;
-    await _releaseResources();
+    await _releaseResources(stopHotspot: stopHotspot);
     if (mounted) {
       setState(() {
         _sessionToken = null;
@@ -246,9 +252,11 @@ class _SenderSessionTabState extends State<_SenderSessionTab> with Refena, Widge
     }
   }
 
-  Future<void> _releaseResources() async {
+  Future<void> _releaseResources({bool stopHotspot = true}) async {
     final token = _sessionToken;
     _sessionToken = null;
+    await _pairingDisconnectSubscription?.cancel();
+    _pairingDisconnectSubscription = null;
     await _pairingActionSubscription?.cancel();
     _pairingActionSubscription = null;
     await _pairingSubscription?.cancel();
@@ -267,13 +275,15 @@ class _SenderSessionTabState extends State<_SenderSessionTab> with Refena, Widge
         // The server may already have stopped while the app was backgrounded.
       }
     }
-    if (_hotspot != null) {
+    if (_hotspot != null && stopHotspot) {
       _hotspot = null;
       try {
         await android_channel.stopLocalOnlyHotspotAndroid();
       } catch (_) {
         // The native reservation may already have been released by Android.
       }
+    } else if (!stopHotspot) {
+      _hotspot = null;
     }
   }
 
@@ -306,9 +316,6 @@ class _SenderSessionTabState extends State<_SenderSessionTab> with Refena, Widge
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _countdownTimer?.cancel();
-    unawaited(_releaseResources());
     super.dispose();
   }
 
@@ -525,11 +532,12 @@ class _QrReceiverTabState extends State<_QrReceiverTab> with Refena {
       });
       if (checkPlatform([TargetPlatform.android])) {
         try {
-          final connected = await android_channel.connectToWifiHotspotAndroid(ssid: payload.ssid, password: payload.password);
-          if (connected) {
+          final result = await android_channel.connectToWifiHotspotAndroid(ssid: payload.ssid, password: payload.password);
+          if (result.succeeded) {
             await _join(payload);
             return;
           }
+          if (mounted) setState(() => _message = '${PairingStrings.hotspotConnectionFailed} (${result.code}) ${result.message}');
         } catch (error) {
           if (mounted) setState(() => _message = '${PairingStrings.hotspotConnectionFailed} $error');
         }
@@ -631,17 +639,8 @@ class _QrReceiverTabState extends State<_QrReceiverTab> with Refena {
   }
 
   @override
-  void dispose() {
-    if (checkPlatform([TargetPlatform.android]) && _payload != null && _state != _ReceiverState.joined) {
-      unawaited(android_channel.disconnectFromWifiHotspotAndroid());
-    }
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final cameraUnavailable = !kIsWeb &&
-        (defaultTargetPlatform == TargetPlatform.linux || defaultTargetPlatform == TargetPlatform.windows);
+    final cameraUnavailable = !kIsWeb && (defaultTargetPlatform == TargetPlatform.linux || defaultTargetPlatform == TargetPlatform.windows);
     final payload = _payload;
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -698,7 +697,11 @@ class _QrReceiverTabState extends State<_QrReceiverTab> with Refena {
         ],
         if (_message != null) ...[
           const SizedBox(height: 10),
-          Text(_message!, style: TextStyle(color: Theme.of(context).colorScheme.error), textAlign: TextAlign.center),
+          Text(
+            _message!,
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+            textAlign: TextAlign.center,
+          ),
         ],
         if (_state == _ReceiverState.joined)
           const Padding(
@@ -717,12 +720,21 @@ class _QrReceiverTabState extends State<_QrReceiverTab> with Refena {
     );
   }
 
-  void _retryScan() {
+  Future<void> _retryScan() async {
+    String? disconnectError;
+    if (checkPlatform([TargetPlatform.android])) {
+      try {
+        await android_channel.disconnectFromWifiHotspotAndroid();
+      } catch (error) {
+        disconnectError = error.toString();
+      }
+    }
+    if (!mounted) return;
     setState(() {
       _payload = null;
       _handledCode = false;
       _state = _ReceiverState.scanning;
-      _message = null;
+      _message = disconnectError;
     });
   }
 }

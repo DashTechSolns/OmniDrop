@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:dart_mappable/dart_mappable.dart';
@@ -8,6 +9,21 @@ part 'android_channel.mapper.dart';
 
 const _methodChannel = MethodChannel('com.omnidrop.app/localsend');
 final _logger = Logger('AndroidSaf');
+final _pairingDisconnectEvents = StreamController<void>.broadcast(sync: true);
+bool _pairingDisconnectHandlerInstalled = false;
+
+Stream<void> get pairingDisconnectEvents {
+  if (!_pairingDisconnectHandlerInstalled) {
+    _methodChannel.setMethodCallHandler((call) async {
+      if (call.method != 'pairingDisconnected') {
+        throw MissingPluginException('Unknown native pairing callback: ${call.method}');
+      }
+      _pairingDisconnectEvents.add(null);
+    });
+    _pairingDisconnectHandlerInstalled = true;
+  }
+  return _pairingDisconnectEvents.stream;
+}
 
 /// From Android 10 and above, we need to use the Storage Access Framework (SAF) to access files due to the scoped storage.
 /// SAF itself is available from Android 4.4 (API level 19).
@@ -150,23 +166,80 @@ Future<AndroidLocalOnlyHotspot> startLocalOnlyHotspotAndroid({bool prefer5GHz = 
   final ssid = result?['ssid'];
   final password = result?['password'];
   final supports5GHz = result?['supports5GHz'];
+  final canRequest5GHz = result?['canRequest5GHz'];
   final hostIp = result?['hostIp'];
-  if (ssid is! String || ssid.isEmpty || password is! String || password.isEmpty || supports5GHz is! bool || hostIp is! String || hostIp.isEmpty) {
+  if (ssid is! String ||
+      ssid.isEmpty ||
+      password is! String ||
+      password.isEmpty ||
+      supports5GHz is! bool ||
+      canRequest5GHz is! bool ||
+      hostIp is! String ||
+      hostIp.isEmpty) {
     throw const FormatException('Android returned invalid local-only hotspot details.');
   }
-  return AndroidLocalOnlyHotspot(ssid: ssid, password: password, supports5GHz: supports5GHz, hostIp: hostIp);
+  return AndroidLocalOnlyHotspot(
+    ssid: ssid,
+    password: password,
+    supports5GHz: supports5GHz,
+    canRequest5GHz: canRequest5GHz,
+    hostIp: hostIp,
+  );
 }
 
 Future<void> stopLocalOnlyHotspotAndroid() async {
   await _methodChannel.invokeMethod<void>('stopLocalOnlyHotspot');
 }
 
-Future<bool> connectToWifiHotspotAndroid({required String ssid, required String password}) async {
-  return await _methodChannel.invokeMethod<bool>('connectToWifiHotspot', {'ssid': ssid, 'password': password}) ?? false;
+Future<AndroidHotspotConnectionResult> connectToWifiHotspotAndroid({required String ssid, required String password}) async {
+  final result = await _methodChannel.invokeMethod<Map>('connectToWifiHotspot', {'ssid': ssid, 'password': password});
+  final code = result?['code'];
+  final message = result?['message'];
+  if (code is! String || message is! String) {
+    throw const FormatException('Android returned an invalid Wi-Fi connection result.');
+  }
+  return AndroidHotspotConnectionResult(code: code, message: message);
 }
 
 Future<void> disconnectFromWifiHotspotAndroid() async {
   await _methodChannel.invokeMethod<void>('disconnectFromWifiHotspot');
+}
+
+Future<AndroidWifiEnableResult> enableWifiAndroid() async {
+  final result = await _methodChannel.invokeMethod<Map>('enableWifi');
+  final success = result?['success'];
+  final path = result?['path'];
+  final message = result?['message'];
+  if (success is! bool || path is! String) {
+    throw const FormatException('Android returned an invalid Wi-Fi enable result.');
+  }
+  return AndroidWifiEnableResult(success: success, path: path, message: message is String ? message : null);
+}
+
+Future<bool> is5GHzBandSupportedAndroid() async {
+  final supported = await _methodChannel.invokeMethod<bool>('is5GHzBandSupported');
+  if (supported == null) throw const FormatException('Android did not return Wi-Fi band capability.');
+  return supported;
+}
+
+Future<bool> canRequest5GHzAndroid() async {
+  final canRequest = await _methodChannel.invokeMethod<bool>('canRequest5GHz');
+  if (canRequest == null) throw const FormatException('Android did not return Wi-Fi band request capability.');
+  return canRequest;
+}
+
+Future<List<AndroidPairingLogEntry>> getNativePairingLogAndroid() async {
+  final entries = await _methodChannel.invokeMethod<List>('getNativePairingLog');
+  return (entries ?? []).map((entry) {
+    if (entry is! Map || entry['timestamp'] is! int || entry['step'] is! String || entry['message'] is! String) {
+      throw const FormatException('Android returned an invalid native pairing log entry.');
+    }
+    return AndroidPairingLogEntry(
+      timestamp: DateTime.fromMillisecondsSinceEpoch(entry['timestamp'] as int),
+      step: entry['step'] as String,
+      message: entry['message'] as String,
+    );
+  }).toList();
 }
 
 Future<void> openAppNotificationSettingsAndroid() async {
@@ -181,14 +254,41 @@ class AndroidLocalOnlyHotspot {
   final String ssid;
   final String password;
   final bool supports5GHz;
+  final bool canRequest5GHz;
   final String hostIp;
 
   const AndroidLocalOnlyHotspot({
     required this.ssid,
     required this.password,
     required this.supports5GHz,
+    required this.canRequest5GHz,
     required this.hostIp,
   });
+}
+
+class AndroidHotspotConnectionResult {
+  final String code;
+  final String message;
+
+  const AndroidHotspotConnectionResult({required this.code, required this.message});
+
+  bool get succeeded => code == 'success';
+}
+
+class AndroidWifiEnableResult {
+  final bool success;
+  final String path;
+  final String? message;
+
+  const AndroidWifiEnableResult({required this.success, required this.path, required this.message});
+}
+
+class AndroidPairingLogEntry {
+  final DateTime timestamp;
+  final String step;
+  final String message;
+
+  const AndroidPairingLogEntry({required this.timestamp, required this.step, required this.message});
 }
 
 @MappableClass()
