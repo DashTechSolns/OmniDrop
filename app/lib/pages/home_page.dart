@@ -8,7 +8,8 @@ import 'package:localsend_app/gen/strings.g.dart';
 import 'package:localsend_app/pages/copy_phone_page.dart';
 import 'package:localsend_app/pages/home_page_controller.dart';
 import 'package:localsend_app/pages/omnidrop_drawer.dart';
-import 'package:localsend_app/pages/pairing/pairing_page.dart';
+import 'package:localsend_app/pages/pairing/pairing_cards.dart';
+import 'package:localsend_app/pages/pairing/pairing_controller_page.dart' show DeviceFromPairingInfo;
 import 'package:localsend_app/pages/pairing/pairing_strings.dart';
 import 'package:localsend_app/pages/tabs/omnidrop_tabs.dart';
 import 'package:localsend_app/pages/tabs/send_tab.dart';
@@ -17,6 +18,7 @@ import 'package:localsend_app/pages/tabs/settings_tab.dart';
 import 'package:localsend_app/provider/network/nearby_devices_provider.dart';
 import 'package:localsend_app/provider/network/scan_facade.dart';
 import 'package:localsend_app/provider/network/send_provider.dart';
+import 'package:localsend_app/provider/pairing/pairing_controller.dart';
 import 'package:localsend_app/provider/selection/selected_sending_files_provider.dart';
 import 'package:localsend_app/util/native/channel/android_channel.dart' as android_channel;
 import 'package:localsend_app/util/native/cross_file_converters.dart';
@@ -29,7 +31,6 @@ import 'package:localsend_app/widget/omnidrop_logo.dart';
 import 'package:localsend_app/widget/responsive_builder.dart';
 import 'package:localsend_isolates/model/session_status.dart';
 import 'package:refena_flutter/refena_flutter.dart';
-import 'package:routerino/routerino.dart';
 
 enum HomeTab {
   webDrop(Icons.language),
@@ -261,42 +262,75 @@ class _HomePageState extends State<HomePage> with Refena {
             bottomNavigationBar: sizingInformation.isMobile
                 ? SafeArea(
                     top: false,
-                    child: GlassCard(
-                      margin: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-                      padding: EdgeInsets.zero,
-                      radius: 30,
-                      blur: true,
-                      child: SizedBox(
-                        height: 68,
-                        child: Row(
-                          children: HomeTab.values.map((tab) {
-                            final selected = vm.currentTab == tab;
-                            if (tab == HomeTab.send) {
-                              return Expanded(
-                                child: Center(
-                                  child: FloatingActionButton(
-                                    heroTag: 'transfer-tab',
-                                    onPressed: () => vm.changeTab(tab),
-                                    child: const OmniDropLogo(size: 28),
+                    child: Consumer(
+                      builder: (context, ref) {
+                        final pairing = ref.watch(pairingControllerProvider);
+                        final showActivePairing = pairing.role == PairingRole.sender && pairing.sessionToken != null && pairing.multiRecipient;
+                        return GlassCard(
+                          margin: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                          padding: EdgeInsets.zero,
+                          radius: 30,
+                          blur: true,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (showActivePairing)
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(14, 8, 8, 4),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.wifi_tethering, color: Theme.of(context).colorScheme.tertiary),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          '${PairingStrings.pairActive} - ${pairing.peers.length} ${PairingStrings.devicesCount}',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: Theme.of(context).textTheme.labelMedium,
+                                        ),
+                                      ),
+                                      TextButton(
+                                        onPressed: () => ref.notifier(pairingControllerProvider).stop(),
+                                        child: const Text(PairingStrings.disconnect),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              );
-                            }
-                            return Expanded(
-                              child: InkWell(
-                                onTap: () => vm.changeTab(tab),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(tab.icon, color: selected ? colors.primary : null),
-                                    Text(tab.label, style: Theme.of(context).textTheme.labelSmall),
-                                  ],
+                              SizedBox(
+                                height: 68,
+                                child: Row(
+                                  children: HomeTab.values.map((tab) {
+                                    final selected = vm.currentTab == tab;
+                                    if (tab == HomeTab.send) {
+                                      return Expanded(
+                                        child: Center(
+                                          child: FloatingActionButton(
+                                            heroTag: 'transfer-tab',
+                                            onPressed: () => vm.changeTab(tab),
+                                            child: const OmniDropLogo(size: 28),
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                    return Expanded(
+                                      child: InkWell(
+                                        onTap: () => vm.changeTab(tab),
+                                        child: Column(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Icon(tab.icon, color: selected ? colors.primary : null),
+                                            Text(tab.label, style: Theme.of(context).textTheme.labelSmall),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
                                 ),
                               ),
-                            );
-                          }).toList(),
-                        ),
-                      ),
+                            ],
+                          ),
+                        );
+                      },
                     ),
                   )
                 : null,
@@ -333,7 +367,10 @@ class _OmniDropBackground extends StatelessWidget {
                 gradient: RadialGradient(
                   center: const Alignment(-0.85, -0.8),
                   radius: 1.0,
-                  colors: [colors.primary.withValues(alpha: light ? 0.20 : 0.22), Colors.transparent],
+                  colors: [
+                    colors.primary.withValues(alpha: light ? 0.20 : 0.22),
+                    Colors.transparent,
+                  ],
                 ),
               ),
             ),
@@ -342,7 +379,10 @@ class _OmniDropBackground extends StatelessWidget {
                 gradient: RadialGradient(
                   center: const Alignment(0.9, 0.9),
                   radius: 1.0,
-                  colors: [colors.secondary.withValues(alpha: light ? 0.12 : 0.18), Colors.transparent],
+                  colors: [
+                    colors.secondary.withValues(alpha: light ? 0.12 : 0.18),
+                    Colors.transparent,
+                  ],
                 ),
               ),
             ),
@@ -361,6 +401,40 @@ class _TransferTab extends StatefulWidget {
 }
 
 class _TransferTabState extends State<_TransferTab> with Refena {
+  Future<void> _openSendPairingCard() async {
+    final peers = await showPairingSendCard(context, onSendOverLan: _startSend);
+    if (!mounted || peers == null || peers.isEmpty) return;
+    var files = ref.read(selectedSendingFilesProvider);
+    if (files.isEmpty) {
+      await AddFileDialog.open(context: context, options: pickerOptions);
+      files = ref.read(selectedSendingFilesProvider);
+    }
+    if (!mounted || files.isEmpty) return;
+
+    final controller = ref.notifier(pairingControllerProvider);
+    controller.setTransferring(true);
+    try {
+      await Future.wait(
+        peers.map(
+          (peer) => ref
+              .notifier(sendProvider)
+              .startSession(
+                target: DeviceFromPairingInfo.convert(peer),
+                files: files,
+                background: true,
+                skipChecksums: true,
+              ),
+        ),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+    } finally {
+      controller.setTransferring(false);
+    }
+  }
+
   Future<void> _startSend() async {
     var files = ref.read(selectedSendingFilesProvider);
     if (files.isEmpty) {
@@ -421,14 +495,6 @@ class _TransferTabState extends State<_TransferTab> with Refena {
                                 },
                                 icon: const Icon(Icons.refresh),
                               ),
-                            IconButton(
-                              tooltip: PairingStrings.pairFiles,
-                              onPressed: () async {
-                                Navigator.of(dialogContext).pop();
-                                await vm.onTapPairing(context);
-                              },
-                              icon: const Icon(Icons.qr_code_2),
-                            ),
                             IconButton(
                               tooltip: 'Close',
                               onPressed: () => Navigator.of(dialogContext).pop(),
@@ -538,23 +604,17 @@ class _TransferTabState extends State<_TransferTab> with Refena {
                   Expanded(
                     child: AnimatedPress(
                       child: FilledButton.icon(
-                        onPressed: _startSend,
+                        onPressed: _openSendPairingCard,
                         icon: const Icon(Icons.send),
-                        label: const Text('Send'),
+                        label: const Text(PairingStrings.send),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 16),
-                  IconButton.filledTonal(
-                    tooltip: PairingStrings.pairFiles,
-                    onPressed: () async => context.push(() => const PairingPage()),
-                    icon: const Icon(Icons.qr_code_2),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
                     child: AnimatedPress(
                       child: FilledButton.tonalIcon(
-                        onPressed: () => showReceivePairingDialog(context),
+                        onPressed: () => showPairingReceiveCard(context),
                         style: FilledButton.styleFrom(
                           backgroundColor: colors.secondaryContainer,
                           foregroundColor: colors.onSecondaryContainer,
