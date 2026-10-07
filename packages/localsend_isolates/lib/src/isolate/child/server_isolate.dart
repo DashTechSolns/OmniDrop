@@ -55,7 +55,7 @@ class HttpServerStartTask implements BaseHttpServerTask {
 /// The stream of this task completes once the server has released the port.
 class HttpServerStopTask implements BaseHttpServerTask {}
 
-enum HttpServerPairingOperation { create, listen, snapshot, finalize, invalidate }
+enum HttpServerPairingOperation { create, listen, listenControl, snapshot, finalize, invalidate }
 
 class HttpServerPairingTask implements BaseHttpServerTask {
   final HttpServerPairingOperation operation;
@@ -63,6 +63,8 @@ class HttpServerPairingTask implements BaseHttpServerTask {
   final String? sessionToken;
   final bool discoverable;
   final int? avatarIndex;
+  final String? pin;
+  final bool multiRecipient;
 
   const HttpServerPairingTask({
     required this.operation,
@@ -70,6 +72,8 @@ class HttpServerPairingTask implements BaseHttpServerTask {
     this.sessionToken,
     this.discoverable = false,
     this.avatarIndex,
+    this.pin,
+    this.multiRecipient = false,
   });
 }
 
@@ -193,11 +197,13 @@ class HttpServerPairingEvent extends HttpServerEvent {
   final String? sessionToken;
   final PairingSessionSnapshot? snapshot;
   final RsPairingEvent? event;
+  final String? controlEvent;
 
   HttpServerPairingEvent({
     this.sessionToken,
     this.snapshot,
     this.event,
+    this.controlEvent,
   });
 }
 
@@ -607,10 +613,12 @@ Future<void> setupHttpServerIsolate(
               case HttpServerPairingOperation.create:
                 final sender = pairingTask.sender;
                 if (sender == null) throw StateError('Pairing sender details are missing');
-                final sessionToken = await server.createPairingSession(
+                final sessionToken = await server.createPairingSessionWithOptions(
                   sender: sender,
                   discoverable: pairingTask.discoverable,
                   avatarIndex: pairingTask.avatarIndex,
+                  pin: pairingTask.pin,
+                  multiRecipient: pairingTask.multiRecipient,
                 );
                 emit(HttpServerPairingEvent(sessionToken: sessionToken));
               case HttpServerPairingOperation.listen:
@@ -618,6 +626,12 @@ Future<void> setupHttpServerIsolate(
                 if (sessionToken == null) throw StateError('Pairing session token is missing');
                 await for (final event in server.listenPairingSession(sessionToken: sessionToken)) {
                   emit(HttpServerPairingEvent(sessionToken: sessionToken, event: event));
+                }
+              case HttpServerPairingOperation.listenControl:
+                final sessionToken = pairingTask.sessionToken;
+                if (sessionToken == null) throw StateError('Pairing session token is missing');
+                await for (final event in server.listenPairingControlEvents(sessionToken: sessionToken)) {
+                  emit(HttpServerPairingEvent(sessionToken: sessionToken, controlEvent: event));
                 }
               case HttpServerPairingOperation.snapshot:
                 final sessionToken = pairingTask.sessionToken;

@@ -7,6 +7,7 @@ class PairQrPayload {
   final String sessionToken;
   final String ssid;
   final String password;
+  final bool pinRequired;
   final int expiresAtMs;
 
   const PairQrPayload({
@@ -18,6 +19,7 @@ class PairQrPayload {
     required this.sessionToken,
     required this.ssid,
     required this.password,
+    required this.pinRequired,
     required this.expiresAtMs,
   });
 }
@@ -59,6 +61,7 @@ ParsedQrPayload parseQrPayload(String value) {
     final sessionToken = uri.queryParameters['token'];
     final ssid = uri.queryParameters['ssid'];
     final password = uri.queryParameters['password'];
+    final pinRequiredValue = uri.queryParameters['pin'];
     final expiresAtMs = int.tryParse(uri.queryParameters['exp'] ?? '');
     if (alias == null || alias.isEmpty || ip == null || ip.isEmpty || port == null || port < 1 || port > 65535) {
       return const InvalidQrPayload();
@@ -72,6 +75,7 @@ ParsedQrPayload parseQrPayload(String value) {
         ssid.isEmpty ||
         password == null ||
         password.isEmpty ||
+        pinRequiredValue != null && pinRequiredValue != 'true' && pinRequiredValue != 'false' ||
         expiresAtMs == null) {
       return const InvalidQrPayload();
     }
@@ -86,6 +90,7 @@ ParsedQrPayload parseQrPayload(String value) {
         sessionToken: sessionToken,
         ssid: ssid,
         password: password,
+        pinRequired: pinRequiredValue == 'true',
         expiresAtMs: expiresAtMs,
       ),
     );

@@ -19,6 +19,7 @@ void main() {
             'token': 'once',
             'ssid': 'OmniDrop',
             'password': 'wifi-password',
+            'pin': 'false',
             'exp': '$expiresAtMs',
           },
         ).toString(),
@@ -34,6 +35,7 @@ void main() {
       expect(payload.sessionToken, 'once');
       expect(payload.ssid, 'OmniDrop');
       expect(payload.password, 'wifi-password');
+      expect(payload.pinRequired, isFalse);
       expect(payload.expiresAtMs, expiresAtMs);
     });
 

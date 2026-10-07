@@ -425,7 +425,7 @@ class _TransferTabState extends State<_TransferTab> with Refena {
                               tooltip: PairingStrings.pairFiles,
                               onPressed: () async {
                                 Navigator.of(dialogContext).pop();
-                                await context.push(() => const PairingPage());
+                                await vm.onTapPairing(context);
                               },
                               icon: const Icon(Icons.qr_code_2),
                             ),
@@ -543,6 +543,12 @@ class _TransferTabState extends State<_TransferTab> with Refena {
                         label: const Text('Send'),
                       ),
                     ),
+                  ),
+                  const SizedBox(width: 16),
+                  IconButton.filledTonal(
+                    tooltip: PairingStrings.pairFiles,
+                    onPressed: () async => context.push(() => const PairingPage()),
+                    icon: const Icon(Icons.qr_code_2),
                   ),
                   const SizedBox(width: 16),
                   Expanded(

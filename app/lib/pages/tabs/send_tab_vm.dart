@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:localsend_app/model/cross_file.dart';
 import 'package:localsend_app/model/persistence/favorite_device.dart';
 import 'package:localsend_app/model/send_mode.dart';
+import 'package:localsend_app/pages/pairing/pairing_page.dart';
 import 'package:localsend_app/pages/progress_page.dart';
 import 'package:localsend_app/pages/send_page.dart';
 import 'package:localsend_app/pages/tabs/send_tab.dart';
@@ -33,6 +34,7 @@ class SendTabVm {
   final Future<void> Function(BuildContext context, SendMode mode) onTapSendMode;
   final Future<void> Function(BuildContext context, Device device) onTapDevice;
   final Future<void> Function(BuildContext context, Device device) onTapDeviceMultiSend;
+  final Future<void> Function(BuildContext context) onTapPairing;
 
   const SendTabVm({
     required this.sendMode,
@@ -45,6 +47,7 @@ class SendTabVm {
     required this.onTapSendMode,
     required this.onTapDevice,
     required this.onTapDeviceMultiSend,
+    required this.onTapPairing,
   });
 }
 
@@ -216,6 +219,9 @@ final sendTabVmProvider = ViewProvider((ref) {
             files: files,
             background: true,
           );
+    },
+    onTapPairing: (context) async {
+      await context.push(() => const PairingPage());
     },
   );
 });

@@ -7,15 +7,15 @@ import 'package:localsend_app/gen/strings.g.dart';
 import 'package:localsend_app/pages/about/about_page.dart';
 import 'package:localsend_app/pages/changelog_page.dart';
 import 'package:localsend_app/pages/donation/donation_page.dart';
+import 'package:localsend_app/pages/pairing/pairing_log_page.dart';
 import 'package:localsend_app/pages/settings/network_interfaces_page.dart';
-import 'package:localsend_app/util/native/channel/android_channel.dart' as android_channel;
 import 'package:localsend_app/pages/tabs/settings_tab_controller.dart';
 import 'package:localsend_app/provider/network/server/server_provider.dart';
 import 'package:localsend_app/provider/settings_provider.dart';
 import 'package:localsend_app/provider/version_provider.dart';
 import 'package:localsend_app/util/alias_generator.dart';
 import 'package:localsend_app/util/device_type_ext.dart';
-import 'package:localsend_app/util/i18n.dart';
+import 'package:localsend_app/util/native/channel/android_channel.dart' as android_channel;
 import 'package:localsend_app/util/native/macos_channel.dart';
 import 'package:localsend_app/util/native/pick_directory_path.dart';
 import 'package:localsend_app/util/native/platform_check.dart';
@@ -27,9 +27,9 @@ import 'package:localsend_app/widget/dialogs/quick_save_from_favorites_notice.da
 import 'package:localsend_app/widget/dialogs/quick_save_notice.dart';
 import 'package:localsend_app/widget/dialogs/text_field_tv.dart';
 import 'package:localsend_app/widget/dialogs/text_field_with_actions.dart';
+import 'package:localsend_app/widget/glass/glass_card.dart';
 import 'package:localsend_app/widget/labeled_checkbox.dart';
 import 'package:localsend_app/widget/local_send_logo.dart';
-import 'package:localsend_app/widget/glass/glass_card.dart';
 import 'package:localsend_app/widget/responsive_list_view.dart';
 import 'package:localsend_isolates/constants.dart';
 import 'package:localsend_isolates/model/device.dart';
@@ -528,6 +528,13 @@ class SettingsTab extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 20),
+            if (vm.advanced)
+              _ButtonEntry(
+                label: 'Pairing log',
+                buttonLabel: 'Open',
+                onTap: () async => context.push(() => const PairingLogPage()),
+              ),
+            if (vm.advanced) const SizedBox(height: 12),
             const LocalSendLogo(withText: true),
             const SizedBox(height: 5),
             ref

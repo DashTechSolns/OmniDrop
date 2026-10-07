@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:localsend_app/config/theme.dart';
 import 'package:localsend_app/model/state/send/send_session_state.dart';
+import 'package:localsend_app/pages/pairing/pairing_controller_page.dart';
 import 'package:localsend_app/pages/pairing/pairing_strings.dart';
 import 'package:localsend_app/provider/device_info_provider.dart';
 import 'package:localsend_app/provider/http_provider.dart';
@@ -16,8 +17,10 @@ import 'package:localsend_app/provider/network/server/server_provider.dart';
 import 'package:localsend_app/provider/persistence_provider.dart';
 import 'package:localsend_app/provider/selection/selected_sending_files_provider.dart';
 import 'package:localsend_app/util/native/channel/android_channel.dart' as android_channel;
+import 'package:localsend_app/util/native/file_picker.dart';
 import 'package:localsend_app/util/native/platform_check.dart';
 import 'package:localsend_app/util/qr_payload_parser.dart';
+import 'package:localsend_app/widget/dialogs/add_file_dialog.dart';
 import 'package:localsend_app/widget/glass/glass_card.dart';
 import 'package:localsend_isolates/isolate.dart';
 import 'package:localsend_isolates/model/device.dart';
@@ -38,26 +41,7 @@ class PairingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text(PairingStrings.pairing),
-          bottom: const TabBar(
-            tabs: [
-              Tab(text: PairingStrings.qr, icon: Icon(Icons.qr_code_2)),
-              Tab(text: PairingStrings.wifiDirect, icon: Icon(Icons.wifi_find)),
-            ],
-          ),
-        ),
-        body: const TabBarView(
-          children: [
-            _SenderSessionTab(discoverable: false),
-            _SenderSessionTab(discoverable: true),
-          ],
-        ),
-      ),
-    );
+    return const ControllerPairingPage();
   }
 }
 
@@ -290,10 +274,11 @@ class _SenderSessionTabState extends State<_SenderSessionTab> with Refena {
   Future<void> _sendToSelected() async {
     final recipients = _joined.entries.where((entry) => !_removed.contains(entry.key) && _selected.contains(entry.key)).toList();
     if (recipients.isEmpty) return;
-    final files = ref.read(selectedSendingFilesProvider);
+    var files = ref.read(selectedSendingFilesProvider);
     if (files.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text(PairingStrings.sendFilesFirst)));
-      return;
+      await AddFileDialog.open(context: context, options: FilePickerOption.getOptionsForPlatform());
+      files = ref.read(selectedSendingFilesProvider);
+      if (!context.mounted || files.isEmpty) return;
     }
     setState(() => _sending = true);
     try {
@@ -457,46 +442,7 @@ class PairingReceiveDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final height = (size.height * 0.82).clamp(260.0, 720.0).toDouble();
-    final width = (size.width - 32).clamp(280.0, 540.0).toDouble();
-    return DefaultTabController(
-      length: 2,
-      child: Dialog(
-        insetPadding: const EdgeInsets.all(16),
-        child: SizedBox(
-          width: width,
-          height: height,
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 10, 8, 0),
-                child: Row(
-                  children: [
-                    Expanded(child: Text(PairingStrings.pairing, style: Theme.of(context).textTheme.titleLarge)),
-                    IconButton(tooltip: PairingStrings.close, onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.close)),
-                  ],
-                ),
-              ),
-              const TabBar(
-                tabs: [
-                  Tab(text: PairingStrings.qrScanner, icon: Icon(Icons.qr_code_scanner)),
-                  Tab(text: PairingStrings.nearby, icon: Icon(Icons.devices)),
-                ],
-              ),
-              Expanded(
-                child: TabBarView(
-                  children: [
-                    _QrReceiverTab(allowWebDropLinks: allowWebDropLinks),
-                    const _NearbyReceiverTab(),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    return ControllerPairingReceiveDialog(allowWebDropLinks: allowWebDropLinks);
   }
 }
 

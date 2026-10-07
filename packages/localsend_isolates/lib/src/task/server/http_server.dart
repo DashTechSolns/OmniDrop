@@ -60,8 +60,24 @@ class HttpServerService {
     int? avatarIndex,
   }) => _requireServer().createPairingSession(sender: sender, discoverable: discoverable, avatarIndex: avatarIndex);
 
-  Stream<RsPairingEvent> listenPairingSession({required String sessionToken}) =>
-      _requireServer().listenPairingSession(sessionToken: sessionToken);
+  Future<String> createPairingSessionWithOptions({
+    required PairingDeviceInfo sender,
+    required bool discoverable,
+    int? avatarIndex,
+    String? pin,
+    required bool multiRecipient,
+  }) => _requireServer().createPairingSessionWithOptions(
+    sender: sender,
+    discoverable: discoverable,
+    avatarIndex: avatarIndex,
+    pin: pin,
+    multiRecipient: multiRecipient,
+  );
+
+  Stream<RsPairingEvent> listenPairingSession({required String sessionToken}) => _requireServer().listenPairingSession(sessionToken: sessionToken);
+
+  Stream<String> listenPairingControlEvents({required String sessionToken}) =>
+      _requireServer().listenPairingControlEvents(sessionToken: sessionToken);
 
   Future<PairingSessionSnapshot> pairingSessionSnapshot({required String sessionToken}) =>
       _requireServer().pairingSessionSnapshot(sessionToken: sessionToken);
@@ -69,8 +85,7 @@ class HttpServerService {
   Future<PairingSessionSnapshot> finalizePairingSession({required String sessionToken}) =>
       _requireServer().finalizePairingSession(sessionToken: sessionToken);
 
-  Future<void> invalidatePairingSession({required String sessionToken}) =>
-      _requireServer().invalidatePairingSession(sessionToken: sessionToken);
+  Future<void> invalidatePairingSession({required String sessionToken}) => _requireServer().invalidatePairingSession(sessionToken: sessionToken);
 
   /// Answers a pending file upload with the target the file should be saved to
   /// (either a [path] or a [fileDescriptor]).
