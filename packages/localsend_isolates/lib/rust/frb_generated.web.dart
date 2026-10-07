@@ -201,6 +201,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  RustStreamSink<String> dco_decode_StreamSink_String_Sse(dynamic raw);
+
+  @protected
   RustStreamSink<double> dco_decode_StreamSink_f_64_Sse(dynamic raw);
 
   @protected
@@ -723,6 +726,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   RustStreamSink<RtcFileReceiver> sse_decode_StreamSink_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerRTCFileReceiver_Sse(
     SseDeserializer deserializer,
   );
+
+  @protected
+  RustStreamSink<String> sse_decode_StreamSink_String_Sse(SseDeserializer deserializer);
 
   @protected
   RustStreamSink<double> sse_decode_StreamSink_f_64_Sse(SseDeserializer deserializer);
@@ -1296,6 +1302,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     RustStreamSink<RtcFileReceiver> self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_StreamSink_String_Sse(RustStreamSink<String> self, SseSerializer serializer);
 
   @protected
   void sse_encode_StreamSink_f_64_Sse(RustStreamSink<double> self, SseSerializer serializer);

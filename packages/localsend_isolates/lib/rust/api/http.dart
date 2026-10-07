@@ -47,6 +47,15 @@ abstract class RsHttpClient implements RustOpaqueInterface {
     required PairingJoinRequest request,
   });
 
+  /// Joins a pairing session, including its optional PIN in the request body.
+  Future<PairingJoinResponse> joinPairingWithPin({
+    required ProtocolType protocol,
+    required String ip,
+    required int port,
+    required PairingJoinRequest request,
+    String? pin,
+  });
+
   Future<PrepareUploadResult> prepareUpload({
     required ProtocolType protocol,
     required String ip,

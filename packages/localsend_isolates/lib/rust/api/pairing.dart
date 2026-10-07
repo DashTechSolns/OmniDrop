@@ -14,6 +14,8 @@ part 'pairing.freezed.dart';
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `PreparedTransferFile`, `PreparedTransferSet`, `TransferSource`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `drop`
 
+String generatePairingPin() => RustLib.instance.api.crateApiPairingGeneratePairingPin();
+
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<StagedTempFiles>>
 abstract class StagedTempFiles implements RustOpaqueInterface {
   static Future<StagedTempFiles> default_() => RustLib.instance.api.crateApiPairingStagedTempFilesDefault();

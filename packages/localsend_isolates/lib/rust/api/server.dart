@@ -67,6 +67,15 @@ abstract class RsHttpServer implements RustOpaqueInterface {
   /// Creates a short-lived pairing session associated with the sender's device details.
   Future<String> createPairingSession({required PairingDeviceInfo sender, required bool discoverable, int? avatarIndex});
 
+  /// Creates a pairing session with an optional six-digit PIN and recipient policy.
+  Future<String> createPairingSessionWithOptions({
+    required PairingDeviceInfo sender,
+    required bool discoverable,
+    int? avatarIndex,
+    String? pin,
+    required bool multiRecipient,
+  });
+
   /// Fails the pending [RsServerEvent::WebFileDownload] event, e.g. because
   /// the application failed to resolve a source for the file content.
   ///
@@ -96,6 +105,11 @@ abstract class RsHttpServer implements RustOpaqueInterface {
   /// Also returns when the Dart side of the stream is gone (e.g. after a
   /// hot restart), so this call does not keep the server alive forever.
   Stream<RsServerEvent> listen();
+
+  /// Streams `paired`, `lockedOut`, and `finalized` control events.
+  ///
+  /// Subscribe before joins; `paired` and `lockedOut` do not end the stream.
+  Stream<String> listenPairingControlEvents({required String sessionToken});
 
   /// Streams receiver joins until the sender finalizes the pairing session.
   ///
