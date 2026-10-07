@@ -4,7 +4,25 @@ import 'package:test/test.dart';
 void main() {
   group('parseQrPayload', () {
     test('parses a complete OmniDrop pairing code', () {
-      final parsed = parseQrPayload('omnidrop://pair?alias=Phone&ip=192.168.1.4&port=53317&https=true&fp=ABCD&sid=once');
+      final fingerprint = List.filled(64, 'A').join();
+      final expiresAtMs = DateTime.now().millisecondsSinceEpoch + 60000;
+      final parsed = parseQrPayload(
+        Uri(
+          scheme: 'omnidrop',
+          host: 'pair',
+          queryParameters: {
+            'alias': 'Phone',
+            'ip': '192.168.1.4',
+            'port': '53317',
+            'https': 'true',
+            'fp': fingerprint,
+            'token': 'once',
+            'ssid': 'OmniDrop',
+            'password': 'wifi-password',
+            'exp': '$expiresAtMs',
+          },
+        ).toString(),
+      );
 
       expect(parsed, isA<ParsedPairQr>());
       final payload = (parsed as ParsedPairQr).payload;
@@ -12,8 +30,11 @@ void main() {
       expect(payload.ip, '192.168.1.4');
       expect(payload.port, 53317);
       expect(payload.https, isTrue);
-      expect(payload.fingerprint, 'ABCD');
-      expect(payload.sessionId, 'once');
+      expect(payload.fingerprint, fingerprint);
+      expect(payload.sessionToken, 'once');
+      expect(payload.ssid, 'OmniDrop');
+      expect(payload.password, 'wifi-password');
+      expect(payload.expiresAtMs, expiresAtMs);
     });
 
     test('rejects incomplete or invalid pairing codes', () {

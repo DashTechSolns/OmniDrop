@@ -5,8 +5,8 @@ use crate::frb_generated::StreamSink;
 use flutter_rust_bridge::frb;
 pub use localsend::http::client::{ClientError, LsHttpClientVersion};
 pub use localsend::http::dto::{
-    PrepareUploadRequestDto, PrepareUploadResponseDto, PrepareUploadResult,
-    RegisterDto, RegisterResponseDto,
+    PrepareUploadRequestDto, PrepareUploadResponseDto, PrepareUploadResult, RegisterDto,
+    RegisterResponseDto,
 };
 use localsend::model::discovery::ProtocolType;
 use localsend::reqwest;
@@ -64,6 +64,21 @@ impl RsHttpClient {
     ) -> Result<PairingJoinResponse, RsHttpClientError> {
         self.inner
             .join_pairing(protocol, ip, port, request)
+            .await
+            .map_err(RsHttpClientError::from)
+    }
+
+    /// Joins a pairing session, including its optional PIN in the request body.
+    pub async fn join_pairing_with_pin(
+        &self,
+        protocol: ProtocolType,
+        ip: &str,
+        port: u16,
+        request: PairingJoinRequest,
+        pin: Option<String>,
+    ) -> Result<PairingJoinResponse, RsHttpClientError> {
+        self.inner
+            .join_pairing_with_pin(protocol, ip, port, request, pin.as_deref())
             .await
             .map_err(RsHttpClientError::from)
     }

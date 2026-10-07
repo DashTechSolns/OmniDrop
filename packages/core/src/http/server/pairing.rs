@@ -2,7 +2,9 @@ use crate::http::server::common::collect_to_json::CollectToJson;
 use crate::http::server::common::error::AppError;
 use crate::http::server::common::response::{BoxedBody, JsonResponse};
 use crate::http::server::{AppState, RequestClientInfo};
-use crate::pairing::{PairingDeviceInfo, PairingJoinRequest, PairingJoinResponse, PairingSessionError};
+use crate::pairing::{
+    PairingDeviceInfo, PairingJoinPayload, PairingJoinResponse, PairingSessionError,
+};
 use hyper::body::Incoming;
 use hyper::{Response, StatusCode};
 
@@ -11,12 +13,13 @@ pub(crate) async fn join(
     state: AppState,
     client_info: RequestClientInfo,
 ) -> Result<Response<BoxedBody>, AppError> {
-    let request = body.collect_to_json::<PairingJoinRequest>().await?;
+    let PairingJoinPayload { request, pin } = body.collect_to_json::<PairingJoinPayload>().await?;
     if request.session_token.trim().is_empty() {
         return Err(AppError::BadRequest(
             "Pairing session token must not be empty".to_string(),
         ));
     }
+    let session_token = request.session_token;
 
     if let Some(cert_fingerprint) = client_info.cert_fingerprint() {
         if request.fingerprint.to_ascii_uppercase() != cert_fingerprint {
@@ -39,7 +42,11 @@ pub(crate) async fn join(
         has_web_interface: request.has_web_interface,
     };
 
-    match state.pairing.join(&request.session_token, device).await {
+    match state
+        .pairing
+        .join(&session_token, device, pin.as_deref())
+        .await
+    {
         Ok((snapshot, _)) => Ok(JsonResponse {
             status: StatusCode::OK,
             body: PairingJoinResponse {
@@ -66,25 +73,36 @@ pub(crate) async fn send_offer(state: AppState) -> Result<Response<BoxedBody>, A
 
 fn pairing_error(error: PairingSessionError) -> AppError {
     let (status, message) = match error {
-        PairingSessionError::NotFound => {
-            (StatusCode::NOT_FOUND, "Pairing session not found")
-        }
-        PairingSessionError::Expired => {
-            (StatusCode::GONE, "Pairing session expired")
-        }
+        PairingSessionError::NotFound => (StatusCode::NOT_FOUND, "Pairing session not found"),
+        PairingSessionError::Expired => (StatusCode::GONE, "Pairing session expired"),
         PairingSessionError::Closed => (StatusCode::CONFLICT, "Pairing session is closed"),
+        PairingSessionError::NotAcceptingJoins => (
+            StatusCode::CONFLICT,
+            "Pairing session is not accepting joins",
+        ),
+        PairingSessionError::IncorrectPin => (StatusCode::FORBIDDEN, "Pairing PIN is incorrect"),
+        PairingSessionError::LockedOut => (
+            StatusCode::TOO_MANY_REQUESTS,
+            "Pairing session is locked after too many incorrect PIN attempts",
+        ),
+        PairingSessionError::InvalidPin => (
+            StatusCode::BAD_REQUEST,
+            "Pairing PIN must contain exactly six digits",
+        ),
         PairingSessionError::NotFinalized => {
             (StatusCode::CONFLICT, "Pairing session is not finalized")
         }
         PairingSessionError::TransferStarted => {
             (StatusCode::CONFLICT, "Transfer has already started")
         }
-        PairingSessionError::NoJoinedDevices => {
-            (StatusCode::BAD_REQUEST, "No devices joined this pairing session")
-        }
-        PairingSessionError::InvalidDevice => {
-            (StatusCode::BAD_REQUEST, "Invalid joining device information")
-        }
+        PairingSessionError::NoJoinedDevices => (
+            StatusCode::BAD_REQUEST,
+            "No devices joined this pairing session",
+        ),
+        PairingSessionError::InvalidDevice => (
+            StatusCode::BAD_REQUEST,
+            "Invalid joining device information",
+        ),
     };
     AppError::Message(status, message.to_string())
 }

@@ -377,6 +377,18 @@ impl LsHttpClientV2 {
         port: u16,
         request: PairingJoinRequest,
     ) -> Result<PairingJoinResponse, ClientError> {
+        self.join_pairing_with_pin(protocol, ip, port, request, None)
+            .await
+    }
+
+    pub async fn join_pairing_with_pin(
+        &self,
+        protocol: ProtocolType,
+        ip: &str,
+        port: u16,
+        request: PairingJoinRequest,
+        pin: Option<&str>,
+    ) -> Result<PairingJoinResponse, ClientError> {
         let url = TargetUrl {
             version: ApiVersion::OmniDropV1,
             protocol: protocol.as_str(),
@@ -391,7 +403,12 @@ impl LsHttpClientV2 {
             .client
             .post(&url)
             .header("Content-Type", "application/json")
-            .body(serde_json::to_string(&request)?)
+            .body(serde_json::to_string(
+                &crate::pairing::PairingJoinRequestWithPin {
+                    request: &request,
+                    pin,
+                },
+            )?)
             .send()
             .await?;
         if response.status() != StatusCode::OK {

@@ -10,6 +10,11 @@ pub use localsend::pairing::{
     PairingSendOffer, PairingSessionEvent, PairingSessionSnapshot,
 };
 
+#[frb(sync)]
+pub fn generate_pairing_pin() -> String {
+    localsend::pairing::generate_pairing_pin()
+}
+
 #[frb(mirror(PairingSendOffer))]
 pub struct _PairingSendOffer {
     pub alias: String,
@@ -55,6 +60,19 @@ impl RsHttpServer {
         discoverable: bool,
         avatar_index: Option<u32>,
     ) -> Result<String, String> {
+        self.create_pairing_session_with_options(sender, discoverable, avatar_index, None, true)
+            .await
+    }
+
+    /// Creates a pairing session with an optional six-digit PIN and recipient policy.
+    pub async fn create_pairing_session_with_options(
+        &self,
+        sender: PairingDeviceInfo,
+        discoverable: bool,
+        avatar_index: Option<u32>,
+        pin: Option<String>,
+        multi_recipient: bool,
+    ) -> Result<String, String> {
         if sender.fingerprint.trim().is_empty()
             || sender.alias.trim().is_empty()
             || sender.ip.trim().is_empty()
@@ -62,7 +80,10 @@ impl RsHttpServer {
         {
             return Err("Sender identity and connection details must be complete".to_string());
         }
-        Ok(self.pairing.create(sender, discoverable, avatar_index).await)
+        self.pairing
+            .create(sender, discoverable, avatar_index, pin, multi_recipient)
+            .await
+            .map_err(|error| error.to_string())
     }
 
     /// Streams receiver joins until the sender finalizes the pairing session.
@@ -85,13 +106,11 @@ impl RsHttpServer {
         loop {
             match events.recv().await {
                 Ok(PairingSessionEvent::DeviceJoined(device)) => {
-                    if sink
-                        .add(RsPairingEvent::DeviceJoined { device })
-                        .is_err()
-                    {
+                    if sink.add(RsPairingEvent::DeviceJoined { device }).is_err() {
                         return;
                     }
                 }
+                Ok(PairingSessionEvent::Paired | PairingSessionEvent::LockedOut) => {}
                 Ok(PairingSessionEvent::Finalized) => {
                     let _ = sink.add(RsPairingEvent::Finalized);
                     return;
@@ -103,6 +122,43 @@ impl RsHttpServer {
                     return;
                 }
                 Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
+            }
+        }
+    }
+
+    /// Streams `paired`, `lockedOut`, and `finalized` control events.
+    ///
+    /// Subscribe before joins; `paired` and `lockedOut` do not end the stream.
+    pub async fn listen_pairing_control_events(
+        &self,
+        sink: StreamSink<String>,
+        session_token: String,
+    ) {
+        let mut events = match self.pairing.subscribe(&session_token).await {
+            Ok(events) => events,
+            Err(error) => {
+                let _ = sink.add_error(anyhow::anyhow!(error.to_string()));
+                return;
+            }
+        };
+
+        loop {
+            let event = match events.recv().await {
+                Ok(PairingSessionEvent::DeviceJoined(_)) => continue,
+                Ok(PairingSessionEvent::Paired) => "paired",
+                Ok(PairingSessionEvent::LockedOut) => "lockedOut",
+                Ok(PairingSessionEvent::Finalized) => "finalized",
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(count)) => {
+                    let _ = sink.add_error(anyhow::anyhow!(
+                        "Pairing event listener missed {count} event(s); retrieve a session snapshot"
+                    ));
+                    return;
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
+            };
+            let finalized = event == "finalized";
+            if sink.add(event.to_string()).is_err() || finalized {
+                return;
             }
         }
     }
@@ -165,9 +221,7 @@ impl RsHttpServer {
             return;
         }
         if snapshot.joined_devices.is_empty() {
-            let _ = sink.add_error(anyhow::anyhow!(
-                "No devices joined this pairing session"
-            ));
+            let _ = sink.add_error(anyhow::anyhow!("No devices joined this pairing session"));
             return;
         }
         if files.is_empty() {
@@ -203,7 +257,9 @@ impl RsHttpServer {
                 alias: target.alias.clone(),
             });
             transfers.spawn(async move {
-                let result = send_to_device(sender, target.clone(), private_key, certificate, files, pin).await;
+                let result =
+                    send_to_device(sender, target.clone(), private_key, certificate, files, pin)
+                        .await;
                 (target, result)
             });
         }
@@ -225,9 +281,8 @@ impl RsHttpServer {
                     });
                 }
                 Err(error) => {
-                    let _ = sink.add_error(anyhow::anyhow!(
-                        "Pairing transfer task failed: {error}"
-                    ));
+                    let _ =
+                        sink.add_error(anyhow::anyhow!("Pairing transfer task failed: {error}"));
                     return;
                 }
             }
@@ -438,7 +493,10 @@ impl Drop for StagedTempFiles {
         for path in &self.paths {
             if let Err(error) = std::fs::remove_file(path) {
                 if error.kind() != std::io::ErrorKind::NotFound {
-                    tracing::warn!("Could not remove staged pairing file {}: {error}", path.display());
+                    tracing::warn!(
+                        "Could not remove staged pairing file {}: {error}",
+                        path.display()
+                    );
                 }
             }
         }

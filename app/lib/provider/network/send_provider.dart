@@ -89,15 +89,16 @@ class SendNotifier extends Notifier<Map<String, SendSessionState>> {
     required Device target,
     required List<CrossFile> files,
     required bool background,
+    // Pairing sends skip the protocol-optional checksum preflight.
+    bool skipChecksums = false,
   }) async {
     // Pinned to the device the user picked, so the request is not sent at all
     // if someone else answers on that address.
     final client = ref.read(httpProvider).pinnedTo(target.fingerprint);
     final sessionId = _uuid.v4();
-    final createChecksums = ref.read(settingsProvider).createChecksums;
+    final createChecksums = ref.read(settingsProvider).createChecksums && !skipChecksums;
 
-    // The ids are assigned upfront, so the checksums calculated below
-    // can be mapped back to the corresponding file.
+    // Assign ids upfront so any optional checksums can be mapped to their files.
     final selectedFiles = files.map((file) => (id: _uuid.v4(), file: file)).toList();
 
     state = state.updateSession(
@@ -117,7 +118,7 @@ class SendNotifier extends Notifier<Map<String, SendSessionState>> {
                 size: file.size,
                 fileType: file.fileType,
                 hash: null,
-                // calculated below
+                // Calculated below when checksums are enabled.
                 preview: files.length == 1 && files.first.fileType == FileType.text && files.first.bytes != null
                     ? utf8.decode(files.first.bytes!) // send simple message by embedding it into the preview
                     : null,

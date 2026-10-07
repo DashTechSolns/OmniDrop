@@ -304,6 +304,7 @@ class _SenderSessionTabState extends State<_SenderSessionTab> with Refena {
             target: _deviceFromPairingInfo(entry.value),
             files: files,
             background: true,
+            skipChecksums: true,
           ),
         ),
       );

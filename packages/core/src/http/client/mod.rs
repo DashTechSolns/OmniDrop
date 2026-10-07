@@ -179,7 +179,9 @@ impl LsHttpClient {
     ) -> Result<Option<crate::pairing::PairingSendOffer>, ClientError> {
         match self {
             LsHttpClient::V2(client) => client.send_offer(protocol, ip, port).await,
-            LsHttpClient::V3(_) => Err(ClientError::Other(anyhow::anyhow!("Pairing offers require protocol v2"))),
+            LsHttpClient::V3(_) => Err(ClientError::Other(anyhow::anyhow!(
+                "Pairing offers require protocol v2"
+            ))),
         }
     }
 
@@ -190,9 +192,27 @@ impl LsHttpClient {
         port: u16,
         request: crate::pairing::PairingJoinRequest,
     ) -> Result<crate::pairing::PairingJoinResponse, ClientError> {
+        self.join_pairing_with_pin(protocol, ip, port, request, None)
+            .await
+    }
+
+    pub async fn join_pairing_with_pin(
+        &self,
+        protocol: model::discovery::ProtocolType,
+        ip: &str,
+        port: u16,
+        request: crate::pairing::PairingJoinRequest,
+        pin: Option<&str>,
+    ) -> Result<crate::pairing::PairingJoinResponse, ClientError> {
         match self {
-            LsHttpClient::V2(client) => client.join_pairing(protocol, ip, port, request).await,
-            LsHttpClient::V3(_) => Err(ClientError::Other(anyhow::anyhow!("Pairing joins require protocol v2"))),
+            LsHttpClient::V2(client) => {
+                client
+                    .join_pairing_with_pin(protocol, ip, port, request, pin)
+                    .await
+            }
+            LsHttpClient::V3(_) => Err(ClientError::Other(anyhow::anyhow!(
+                "Pairing joins require protocol v2"
+            ))),
         }
     }
 }
