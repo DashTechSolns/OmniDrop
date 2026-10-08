@@ -118,18 +118,20 @@ class _SenderSessionTabState extends State<_SenderSessionTab> with Refena {
         hasWebInterface: localDevice.download,
       );
       final avatarIndex = ref.read(persistenceProvider).getProfileAvatar() % _avatarIcons.length;
-      final createStream = ref.redux(parentIsolateProvider).dispatchTakeResult(
-        IsolateHttpServerPairingAction(
-          task: HttpServerPairingTask(
-            operation: HttpServerPairingOperation.create,
-            sender: sender,
-            discoverable: widget.discoverable,
-            avatarIndex: avatarIndex,
-          ),
-        ),
-      );
-        final created = (await createStream.firstWhere((event) => event is HttpServerPairingEvent && event.sessionToken != null))
-          as HttpServerPairingEvent;
+      final createStream = ref
+          .redux(parentIsolateProvider)
+          .dispatchTakeResult(
+            IsolateHttpServerPairingAction(
+              task: HttpServerPairingTask(
+                operation: HttpServerPairingOperation.create,
+                sender: sender,
+                discoverable: widget.discoverable,
+                avatarIndex: avatarIndex,
+              ),
+            ),
+          );
+      final created =
+          (await createStream.firstWhere((event) => event is HttpServerPairingEvent && event.sessionToken != null)) as HttpServerPairingEvent;
       final token = created.sessionToken!;
       final expiry = DateTime.now().add(_pairingLifetime);
       _sessionToken = token;
@@ -205,11 +207,13 @@ class _SenderSessionTabState extends State<_SenderSessionTab> with Refena {
   Future<void> _refreshSnapshot() async {
     final token = _sessionToken;
     if (token == null) return;
-    final events = ref.redux(parentIsolateProvider).dispatchTakeResult(
-      IsolateHttpServerPairingAction(
-        task: HttpServerPairingTask(operation: HttpServerPairingOperation.snapshot, sessionToken: token),
-      ),
-    );
+    final events = ref
+        .redux(parentIsolateProvider)
+        .dispatchTakeResult(
+          IsolateHttpServerPairingAction(
+            task: HttpServerPairingTask(operation: HttpServerPairingOperation.snapshot, sessionToken: token),
+          ),
+        );
     final event = (await events.firstWhere((value) => value is HttpServerPairingEvent && value.snapshot != null)) as HttpServerPairingEvent;
     if (!mounted) return;
     setState(() {
@@ -703,7 +707,9 @@ class _NearbyReceiverTabState extends State<_NearbyReceiverTab> with Refena {
   @override
   void initState() {
     super.initState();
-    unawaited(_scan());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_scan());
+    });
   }
 
   Future<void> _scan() async {
@@ -789,15 +795,20 @@ class _NearbyReceiverTabState extends State<_NearbyReceiverTab> with Refena {
               IconButton(
                 tooltip: PairingStrings.refresh,
                 onPressed: _scanning ? null : _scan,
-                icon: _scanning
-                    ? const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.refresh),
+                icon: _scanning ? const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh),
               ),
             ],
           ),
         ),
         if (_error != null && offers.isEmpty)
-          Expanded(child: Center(child: Padding(padding: const EdgeInsets.all(20), child: Text(_error!, textAlign: TextAlign.center))))
+          Expanded(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Text(_error!, textAlign: TextAlign.center),
+              ),
+            ),
+          )
         else
           Expanded(
             child: offers.isEmpty
@@ -972,7 +983,9 @@ class _ErrorStrip extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           child: Row(
             children: [
-              Expanded(child: Text(message, style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer))),
+              Expanded(
+                child: Text(message, style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer)),
+              ),
               IconButton(tooltip: PairingStrings.retry, onPressed: onRetry, icon: const Icon(Icons.refresh)),
             ],
           ),

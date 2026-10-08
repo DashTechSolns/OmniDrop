@@ -1,5 +1,9 @@
+import 'dart:async';
+import 'dart:ui' show PlatformDispatcher;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:localsend_app/config/crash_report.dart';
 import 'package:localsend_app/config/init.dart';
 import 'package:localsend_app/config/init_error.dart';
 import 'package:localsend_app/config/theme.dart';
@@ -22,24 +26,47 @@ import 'package:refena_flutter/addons.dart';
 import 'package:refena_flutter/refena_flutter.dart';
 import 'package:routerino/routerino.dart';
 
-Future<void> main(List<String> args) async {
-  final RefenaContainer container;
-  try {
-    container = await preInit(args);
-  } catch (e, stackTrace) {
-    showInitErrorApp(
-      error: e,
-      stackTrace: stackTrace,
-    );
-    return;
+void main(List<String> args) {
+  var appStarted = false;
+
+  void handleError(Object error, StackTrace stackTrace) {
+    if (appStarted) {
+      unawaited(writeLastCrashReport(error: error, stackTrace: stackTrace));
+      return;
+    }
+
+    showInitErrorApp(error: error, stackTrace: stackTrace);
+    appStarted = true;
   }
 
-  runApp(
-    RefenaScope.withContainer(
-      container: container,
-      child: TranslationProvider(
-        child: const LocalSendApp(),
-      ),
+  unawaited(
+    runZonedGuarded(
+      () async {
+        WidgetsFlutterBinding.ensureInitialized();
+        FlutterError.onError = (details) {
+          handleError(details.exception, details.stack ?? StackTrace.current);
+        };
+        PlatformDispatcher.instance.onError = (error, stackTrace) {
+          handleError(error, stackTrace);
+          return true;
+        };
+
+        try {
+          final container = await preInit(args);
+          runApp(
+            RefenaScope.withContainer(
+              container: container,
+              child: TranslationProvider(
+                child: const LocalSendApp(),
+              ),
+            ),
+          );
+          appStarted = true;
+        } catch (error, stackTrace) {
+          handleError(error, stackTrace);
+        }
+      },
+      handleError,
     ),
   );
 }

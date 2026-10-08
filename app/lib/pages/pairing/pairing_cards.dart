@@ -95,10 +95,13 @@ class _SendPairingCardState extends State<_SendPairingCard> with Refena {
   String _pin = '';
   int _secondsLeft = 300;
   Timer? _stateTimer;
+  bool _initialized = false;
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialized) return;
+    _initialized = true;
     final current = ref.read(pairingControllerProvider);
     _mode = current.sessionToken != null && current.mode == PairingMode.sameNetwork ? PairingMode.sameNetwork : PairingMode.qr;
     _multiRecipient = current.sessionToken != null ? current.multiRecipient : false;
@@ -399,12 +402,17 @@ class _ReceivePairingCardState extends State<_ReceivePairingCard> with Refena {
   final TextEditingController _pinController = TextEditingController();
   int _scannerKey = 0;
   bool _handledCode = false;
+  bool _initialized = false;
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialized) return;
+    _initialized = true;
     _encrypted = ref.read(settingsProvider).https;
-    unawaited(ref.notifier(pairingControllerProvider).enterReceiver());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(ref.notifier(pairingControllerProvider).enterReceiver());
+    });
   }
 
   @override

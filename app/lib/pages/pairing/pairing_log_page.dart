@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:localsend_app/config/crash_report.dart';
 import 'package:localsend_app/provider/pairing/pairing_controller.dart';
 import 'package:refena_flutter/refena_flutter.dart';
 
@@ -15,12 +16,16 @@ class PairingLogPage extends StatefulWidget {
 class _PairingLogPageState extends State<PairingLogPage> with Refena {
   List<PairingLogEntry> _entries = const [];
   Object? _error;
+  String? _lastCrash;
+  Object? _crashReadError;
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
-    unawaited(_refresh());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_refresh());
+    });
   }
 
   Future<void> _refresh() async {
@@ -34,6 +39,17 @@ class _PairingLogPageState extends State<PairingLogPage> with Refena {
     } catch (error) {
       if (mounted) setState(() => _error = error);
     } finally {
+      try {
+        final lastCrash = await readLastCrashReport();
+        if (mounted) {
+          setState(() {
+            _lastCrash = lastCrash;
+            _crashReadError = null;
+          });
+        }
+      } catch (error) {
+        if (mounted) setState(() => _crashReadError = error);
+      }
       if (mounted) setState(() => _loading = false);
     }
   }
@@ -54,25 +70,51 @@ class _PairingLogPageState extends State<PairingLogPage> with Refena {
           IconButton(tooltip: 'Copy', onPressed: _entries.isEmpty ? null : _copy, icon: const Icon(Icons.copy)),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          ? Center(
-              child: Padding(padding: const EdgeInsets.all(24), child: Text('Could not load pairing log: $_error')),
-            )
-          : _entries.isEmpty
-          ? const Center(child: Text('No pairing log entries'))
-          : ListView.builder(
-              itemCount: _entries.length,
-              itemBuilder: (context, index) {
-                final entry = _entries[index];
-                return ListTile(
-                  dense: true,
-                  title: Text(entry.step),
-                  subtitle: Text('${entry.timestamp.toLocal().toIso8601String()}\n${entry.message}'),
-                );
-              },
+      body: Column(
+        children: [
+          if (_lastCrash != null || _crashReadError != null)
+            Card(
+              margin: const EdgeInsets.all(12),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Last crash', style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 8),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 180),
+                      child: SingleChildScrollView(
+                        child: SelectableText(_crashReadError == null ? _lastCrash! : 'Could not read crash report: $_crashReadError'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                ? Center(
+                    child: Padding(padding: const EdgeInsets.all(24), child: Text('Could not load pairing log: $_error')),
+                  )
+                : _entries.isEmpty
+                ? const Center(child: Text('No pairing log entries'))
+                : ListView.builder(
+                    itemCount: _entries.length,
+                    itemBuilder: (context, index) {
+                      final entry = _entries[index];
+                      return ListTile(
+                        dense: true,
+                        title: Text(entry.step),
+                        subtitle: Text('${entry.timestamp.toLocal().toIso8601String()}\n${entry.message}'),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
     );
   }
 }

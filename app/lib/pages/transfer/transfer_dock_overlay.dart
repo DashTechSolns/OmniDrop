@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:localsend_app/config/crash_report.dart';
 import 'package:localsend_app/pages/transfer/transfer_dock.dart';
 import 'package:localsend_app/pages/transfer/transfer_dock_visibility.dart';
 import 'package:localsend_app/pages/transfer/transfer_progress_page.dart';
@@ -8,8 +9,11 @@ import 'package:localsend_app/provider/network/send_provider.dart';
 import 'package:localsend_app/provider/network/server/server_provider.dart';
 import 'package:localsend_app/provider/selection/selected_sending_files_provider.dart';
 import 'package:localsend_isolates/model/session_status.dart';
+import 'package:logging/logging.dart';
 import 'package:refena_flutter/refena_flutter.dart';
 import 'package:routerino/routerino.dart';
+
+final _logger = Logger('TransferDock');
 
 class TransferDockOverlay extends StatefulWidget {
   const TransferDockOverlay({super.key});
@@ -22,12 +26,39 @@ class _TransferDockOverlayState extends State<TransferDockOverlay> with Refena {
   static const _refreshInterval = Duration(milliseconds: 100);
   Timer? _timer;
   final ValueNotifier<_DockState> _dockState = ValueNotifier(const _DockState.hidden());
+  bool _ready = false;
+  bool _failed = false;
 
   @override
   void initState() {
     super.initState();
-    _refresh();
-    _timer = Timer.periodic(_refreshInterval, (_) => _refresh());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      try {
+        _refresh();
+        _timer = Timer.periodic(_refreshInterval, (_) => _refreshSafely());
+        setState(() => _ready = true);
+      } catch (error, stackTrace) {
+        _logger.warning(
+          'Failed to initialize transfer dock; continuing without it: ${sanitizeCrashText(error.toString())}',
+          sanitizeCrashText(stackTrace.toString()),
+        );
+        setState(() => _failed = true);
+      }
+    });
+  }
+
+  void _refreshSafely() {
+    try {
+      _refresh();
+    } catch (error, stackTrace) {
+      _logger.warning(
+        'Transfer dock refresh failed; disabling it: ${sanitizeCrashText(error.toString())}',
+        sanitizeCrashText(stackTrace.toString()),
+      );
+      _timer?.cancel();
+      if (mounted) setState(() => _failed = true);
+    }
   }
 
   void _refresh() {
@@ -64,6 +95,8 @@ class _TransferDockOverlayState extends State<TransferDockOverlay> with Refena {
 
   @override
   Widget build(BuildContext context) {
+    if (!_ready || _failed) return const SizedBox.shrink();
+
     return ValueListenableBuilder(
       valueListenable: _dockState,
       builder: (context, state, _) {

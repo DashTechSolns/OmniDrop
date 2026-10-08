@@ -1,79 +1,51 @@
 import 'package:flutter/material.dart';
-import 'package:localsend_app/util/native/platform_check.dart';
-import 'package:localsend_app/util/native/tray_helper.dart';
-import 'package:logging/logging.dart';
-import 'package:package_info_plus/package_info_plus.dart';
-import 'package:refena_flutter/refena_flutter.dart';
-import 'package:window_manager/window_manager.dart';
+import 'package:flutter/services.dart';
+import 'package:localsend_app/config/crash_report.dart';
 
-final _logger = Logger('Init');
-
-/// Shows an alternative app if the initialization failed.
+/// Shows a self-contained app if initialization fails.
 void showInitErrorApp({
   required Object error,
   required StackTrace stackTrace,
-}) async {
-  _logger.severe('Error during init', error, stackTrace);
-
-  if (checkPlatformIsDesktop()) {
-    await WindowManager.instance.ensureInitialized();
-    await WindowManager.instance.show();
-  }
-
-  runApp(
-    RefenaScope(
-      child: _ErrorApp(
-        error: error,
-        stackTrace: stackTrace,
-      ),
-    ),
-  );
-
-  await showFromTray();
+}) {
+  runApp(CrashScreen(error: error, stackTrace: stackTrace));
 }
 
-class _ErrorApp extends StatefulWidget {
+class CrashScreen extends StatelessWidget {
   final Object error;
   final StackTrace stackTrace;
 
-  const _ErrorApp({
+  const CrashScreen({
     required this.error,
     required this.stackTrace,
   });
 
   @override
-  State<_ErrorApp> createState() => _ErrorAppState();
-}
-
-class _ErrorAppState extends State<_ErrorApp> {
-  final _controller = TextEditingController();
-  String? version;
-
-  @override
-  void initState() {
-    super.initState();
-
-    _controller.text = 'Error: ${widget.error}\n\n${widget.stackTrace}';
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final info = await PackageInfo.fromPlatform();
-      _controller.text = 'OmniDrop ${info.version} (${info.buildNumber})\n\nError: ${widget.error}\n\n${widget.stackTrace}';
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final details = [
+      'Error: ${sanitizeCrashText(error.toString())}',
+      '',
+      sanitizeCrashText(stackTrace.toString()),
+    ].join('\n');
     return MaterialApp(
       title: 'OmniDrop: Error',
       debugShowCheckedModeBanner: false,
       home: Scaffold(
-        body: TextFormField(
-          controller: _controller,
-          maxLines: null,
-          readOnly: true,
-          decoration: const InputDecoration(
-            contentPadding: EdgeInsets.all(10),
-            border: OutlineInputBorder(
-              borderSide: BorderSide(),
+        appBar: AppBar(title: const Text('OmniDrop failed to start')),
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Expanded(child: SingleChildScrollView(child: SelectableText(details))),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () => Clipboard.setData(ClipboardData(text: details)),
+                    icon: const Icon(Icons.copy),
+                    label: const Text('Copy'),
+                  ),
+                ),
+              ],
             ),
           ),
         ),

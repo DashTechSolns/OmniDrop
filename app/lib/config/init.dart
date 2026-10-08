@@ -56,6 +56,14 @@ import 'package:share_handler/share_handler.dart';
 import 'package:window_manager/window_manager.dart';
 
 final _logger = Logger('Init');
+const _initStepTimeout = Duration(seconds: 30);
+
+Future<T> _awaitInit<T>(Future<T> future, String step, {Duration timeout = _initStepTimeout}) {
+  return future.timeout(
+    timeout,
+    onTimeout: () => throw TimeoutException('Timed out while $step', timeout),
+  );
+}
 
 /// Will be called before the MaterialApp started
 Future<RefenaContainer> preInit(List<String> args) async {
@@ -64,27 +72,28 @@ Future<RefenaContainer> preInit(List<String> args) async {
   initLogger(args.contains('-v') || args.contains('--verbose') ? Level.ALL : Level.INFO);
   MapperContainer.globals.use(const FileDtoMapper());
 
-  await RustLib.init();
+  await _awaitInit(RustLib.init(), 'initializing Rust');
 
   if (kDebugMode) {
     try {
-      await rust_logging.enableDebugLogging();
+      await _awaitInit(rust_logging.enableDebugLogging(), 'enabling Rust debug logging');
     } catch (e) {
       _logger.warning('Enabling debug logging failed', e);
     }
   }
 
-  final dynamicColors = await getDynamicColors();
+  final dynamicColors = await _awaitInit(getDynamicColors(), 'reading dynamic colors');
 
-  final persistenceService = await PersistenceService.initialize(
-    supportsDynamicColors: dynamicColors != null,
+  final persistenceService = await _awaitInit(
+    PersistenceService.initialize(supportsDynamicColors: dynamicColors != null),
+    'loading persistent settings',
   );
 
   if (persistenceService.isFirstAppStart && !persistenceService.isPortableMode()) {
-    await enableContextMenu();
+    await _awaitInit(enableContextMenu(), 'enabling the context menu');
   }
 
-  await initI18n();
+  await _awaitInit(initI18n(), 'initializing translations');
 
   TransferNotification.init(notificationStrings);
 
@@ -93,12 +102,15 @@ Future<RefenaContainer> preInit(List<String> args) async {
     // Check if this app is already open and let it "show up".
     // If this is the case, then exit the current instance.
 
-    final handedOver = await notifyRunningInstance(
-      securityContext: persistenceService.getSecurityContext(),
-      port: persistenceService.getPort(),
-      https: persistenceService.isHttps(),
-      showToken: persistenceService.getShowToken(),
-      args: args,
+    final handedOver = await _awaitInit(
+      notifyRunningInstance(
+        securityContext: persistenceService.getSecurityContext(),
+        port: persistenceService.getPort(),
+        https: persistenceService.isHttps(),
+        showToken: persistenceService.getShowToken(),
+        args: args,
+      ),
+      'checking for an existing instance',
     );
     if (handedOver) {
       exit(0); // Another instance does exist
@@ -106,19 +118,21 @@ Future<RefenaContainer> preInit(List<String> args) async {
 
     // initialize tray AFTER i18n has been initialized
     try {
-      await initTray();
+      await _awaitInit(initTray(), 'initializing the system tray');
     } catch (e) {
       _logger.warning('Initializing tray failed: $e');
     }
 
     // initialize size and position
-    await WindowManager.instance.ensureInitialized();
-    await WindowDimensionsController(persistenceService).initDimensionsConfiguration();
+    await _awaitInit(WindowManager.instance.ensureInitialized(), 'initializing the application window');
+    await _awaitInit(WindowDimensionsController(persistenceService).initDimensionsConfiguration(), 'loading window dimensions');
     if (args.contains(startHiddenFlag)) {
       // keep this app hidden
       startHidden = true;
     } else if (defaultTargetPlatform == TargetPlatform.macOS) {
-      startHidden = await isLaunchedAsLoginItem() && await getLaunchAtLoginMinimized();
+      startHidden =
+          await _awaitInit(isLaunchedAsLoginItem(), 'checking login-item launch state') &&
+          await _awaitInit(getLaunchAtLoginMinimized(), 'checking minimized launch preference');
     }
 
     if (startHidden) {
@@ -128,7 +142,7 @@ Future<RefenaContainer> preInit(List<String> args) async {
     }
 
     if (defaultTargetPlatform == TargetPlatform.macOS) {
-      await setupStatusBar();
+      await _awaitInit(setupStatusBar(), 'initializing the status bar');
     }
   }
 
@@ -138,9 +152,9 @@ Future<RefenaContainer> preInit(List<String> args) async {
     observers: kDebugMode ? [CustomRefenaObserver()] : [],
     overrides: [
       persistenceProvider.overrideWithValue(persistenceService),
-      deviceRawInfoProvider.overrideWithValue(await getDeviceInfo()),
+      deviceRawInfoProvider.overrideWithValue(await _awaitInit(getDeviceInfo(), 'reading device information')),
       appArgumentsProvider.overrideWithValue(args),
-      tvProvider.overrideWithValue(await checkIfTv()),
+      tvProvider.overrideWithValue(await _awaitInit(checkIfTv(), 'checking TV device mode')),
       dynamicColorsProvider.overrideWithValue(dynamicColors),
       sleepProvider.overrideWithInitialState((ref) => startHidden),
     ],
@@ -151,31 +165,34 @@ Future<RefenaContainer> preInit(List<String> args) async {
   Routerino.navigatorKey = container.read(navigationProvider).key;
 
   // initialize multi-threading
-  await container.set(
-    parentIsolateProvider.overrideWithNotifier((ref) {
-      final settings = ref.read(settingsProvider);
-      return IsolateController(
-        initialState: ParentIsolateState.initial(
-          SyncState(
-            rootIsolateToken: RootIsolateToken.instance!,
-            securityContext: persistenceService.getSecurityContext(),
-            deviceInfo: ref.read(deviceInfoProvider),
-            alias: settings.alias,
-            port: settings.port,
-            networkWhitelist: settings.networkWhitelist,
-            networkBlacklist: settings.networkBlacklist,
-            protocol: settings.https ? ProtocolType.https : ProtocolType.http,
-            multicastGroup: settings.multicastGroup,
-            discoveryTimeout: settings.discoveryTimeout,
-            serverRunning: true,
-            download: false,
+  await _awaitInit(
+    container.set(
+      parentIsolateProvider.overrideWithNotifier((ref) {
+        final settings = ref.read(settingsProvider);
+        return IsolateController(
+          initialState: ParentIsolateState.initial(
+            SyncState(
+              rootIsolateToken: RootIsolateToken.instance!,
+              securityContext: persistenceService.getSecurityContext(),
+              deviceInfo: ref.read(deviceInfoProvider),
+              alias: settings.alias,
+              port: settings.port,
+              networkWhitelist: settings.networkWhitelist,
+              networkBlacklist: settings.networkBlacklist,
+              protocol: settings.https ? ProtocolType.https : ProtocolType.http,
+              multicastGroup: settings.multicastGroup,
+              discoveryTimeout: settings.discoveryTimeout,
+              serverRunning: true,
+              download: false,
+            ),
           ),
-        ),
-      );
-    }),
+        );
+      }),
+    ),
+    'creating the networking isolate',
   );
 
-  await container.redux(parentIsolateProvider).dispatchAsync(IsolateSetupAction());
+  await _awaitInit(container.redux(parentIsolateProvider).dispatchAsync(IsolateSetupAction()), 'starting networking isolates');
 
   return container;
 }
@@ -184,28 +201,36 @@ StreamSubscription? _sharedMediaSubscription;
 
 /// Will be called when home page has been initialized
 Future<void> postInit(BuildContext context, Ref ref, bool appStart) async {
-  await updateSystemOverlayStyle(context);
+  await _awaitInit(updateSystemOverlayStyle(context), 'updating system overlay style');
 
   if (checkPlatform([TargetPlatform.android])) {
     try {
-      await FlutterDisplayMode.setHighRefreshRate();
+      await _awaitInit(FlutterDisplayMode.setHighRefreshRate(), 'setting display refresh rate');
     } catch (e) {
       _logger.warning('Setting high refresh rate failed', e);
     }
 
     // Android 17+ blocks multicast discovery and LAN connections until this permission is granted,
     // so ask before the server and discovery start.
-    final localNetworkGranted = await requestLocalNetworkPermissionAndroid();
+    final localNetworkGranted = await _awaitInit(requestLocalNetworkPermissionAndroid(), 'requesting local network permission');
     if (!localNetworkGranted) {
       _logger.warning('Local network permission denied. Discovery and transfers may not work.');
       if (context.mounted) {
-        await context.pushBottomSheet(() => const LocalNetworkDialog());
+        try {
+          await _awaitInit(
+            context.pushBottomSheet(() => const LocalNetworkDialog()),
+            'waiting for local network permission settings',
+            timeout: const Duration(minutes: 5),
+          );
+        } on TimeoutException catch (error, stackTrace) {
+          _logger.warning('Local network permission dialog remained open', error, stackTrace);
+        }
       }
     }
   }
 
   try {
-    await ref.notifier(serverProvider).startServerFromSettings();
+    await _awaitInit(ref.notifier(serverProvider).startServerFromSettings(), 'starting the receive server');
   } catch (e) {
     if (context.mounted) {
       context.showSnackBar(e.toString());
@@ -227,10 +252,9 @@ Future<void> postInit(BuildContext context, Ref ref, bool appStart) async {
     if (defaultTargetPlatform == TargetPlatform.macOS) {
       // handle dropped files
       pendingFilesStream.listen((files) async {
-        await ref.global.dispatchAsync(
-          _HandleAppStartArgumentsAction(
-            args: files,
-          ),
+        await _awaitInit(
+          ref.global.dispatchAsync(_HandleAppStartArgumentsAction(args: files)),
+          'handling dropped launch files',
         );
       });
 
@@ -242,13 +266,12 @@ Future<void> postInit(BuildContext context, Ref ref, bool appStart) async {
         ref.redux(homePageControllerProvider).dispatch(ChangeTabAction(HomeTab.send));
       });
 
-      await setupMethodCallHandler();
+      await _awaitInit(setupMethodCallHandler(), 'setting up macOS method calls');
     } else {
       final args = ref.read(appArgumentsProvider);
-      await ref.global.dispatchAsync(
-        _HandleAppStartArgumentsAction(
-          args: args,
-        ),
+      await _awaitInit(
+        ref.global.dispatchAsync(_HandleAppStartArgumentsAction(args: args)),
+        'handling application launch arguments',
       );
     }
   }
@@ -259,7 +282,7 @@ Future<void> postInit(BuildContext context, Ref ref, bool appStart) async {
     final shareHandler = ShareHandlerPlatform.instance;
 
     if (appStart) {
-      final initialSharedPayload = await shareHandler.getInitialSharedMedia();
+      final initialSharedPayload = await _awaitInit(shareHandler.getInitialSharedMedia(), 'reading initial shared media');
       if (initialSharedPayload != null) {
         hasInitialShare = true;
         // ignore: unawaited_futures
@@ -273,17 +296,16 @@ Future<void> postInit(BuildContext context, Ref ref, bool appStart) async {
 
     _sharedMediaSubscription?.cancel(); // ignore: unawaited_futures
     _sharedMediaSubscription = shareHandler.sharedMediaStream.listen((SharedMedia payload) async {
-      await ref.global.dispatchAsync(
-        _HandleShareIntentAction(
-          payload: payload,
-        ),
+      await _awaitInit(
+        ref.global.dispatchAsync(_HandleShareIntentAction(payload: payload)),
+        'handling shared media',
       );
     });
 
     if (checkPlatform([TargetPlatform.android])) {
       // Both messages above travel through the same messenger in order, so the stream is
       // guaranteed to be attached natively before MainActivity replays held-back intents.
-      await flushPendingShareIntentsAndroid();
+      await _awaitInit(flushPendingShareIntentsAndroid(), 'reading pending Android share intents');
     }
   }
 
@@ -301,9 +323,12 @@ Future<void> postInit(BuildContext context, Ref ref, bool appStart) async {
     }
   }
 
-  await ref.future(versionProvider).then((version) async {
-    await ref.read(persistenceProvider).setWhatsNew(version.version);
-  });
+  await _awaitInit(
+    ref.future(versionProvider).then((version) async {
+      await _awaitInit(ref.read(persistenceProvider).setWhatsNew(version.version), 'saving the current app version');
+    }),
+    'checking the current app version',
+  );
 
   // [FOSS_REMOVE_START]
   if (checkPlatformSupportPayment()) {

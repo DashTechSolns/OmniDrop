@@ -48,8 +48,11 @@ class _TransferProgressPageState extends State<TransferProgressPage> with Refena
   void initState() {
     super.initState();
     showTransferProgressPage();
-    _refreshSnapshot();
-    _timer = Timer.periodic(_refreshInterval, (_) => _refreshSnapshot());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _refreshSnapshot();
+      _timer = Timer.periodic(_refreshInterval, (_) => _refreshSnapshot());
+    });
   }
 
   void _refreshSnapshot() {

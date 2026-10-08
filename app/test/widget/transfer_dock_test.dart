@@ -4,6 +4,11 @@ import 'package:localsend_app/pages/transfer/transfer_dock.dart';
 
 void main() {
   testWidgets('dock displays the staged file count', (tester) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     await tester.pumpWidget(
       MaterialApp(
         home: SizedBox(
@@ -23,6 +28,11 @@ void main() {
   });
 
   testWidgets('dock drag snaps to the nearest screen edge', (tester) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     await tester.pumpWidget(
       MaterialApp(
         home: SizedBox(

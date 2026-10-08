@@ -69,10 +69,13 @@ class _SenderPairingTabState extends State<_SenderPairingTab> with Refena {
   bool _pinEnabled = false;
   bool _encrypted = true;
   bool _sending = false;
+  bool _initialized = false;
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialized) return;
+    _initialized = true;
     final controller = ref.notifier(pairingControllerProvider);
     _pinController = TextEditingController(text: controller.suggestPin());
     _encrypted = ref.read(serverProvider)?.https ?? ref.read(settingsProvider).https;
@@ -280,7 +283,9 @@ class _ControllerPairingReceiveDialogState extends State<ControllerPairingReceiv
   void initState() {
     super.initState();
     _pinController = TextEditingController();
-    unawaited(_initializeReceiver());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_initializeReceiver());
+    });
   }
 
   Future<void> _initializeReceiver() async {
