@@ -7,7 +7,8 @@ import 'package:localsend_app/model/state/server/receive_session_state.dart';
 import 'package:localsend_app/model/state/server/receiving_file.dart';
 import 'package:localsend_app/pages/home_page.dart';
 import 'package:localsend_app/pages/home_page_controller.dart';
-import 'package:localsend_app/pages/progress_page.dart';
+import 'package:localsend_app/pages/transfer/transfer_progress_page.dart';
+import 'package:localsend_app/pages/transfer/transfer_dock_visibility.dart';
 import 'package:localsend_app/pages/receive_page.dart';
 import 'package:localsend_app/provider/device_info_provider.dart';
 import 'package:localsend_app/provider/favorites_provider.dart';
@@ -80,9 +81,8 @@ class ReceiveController {
     final String destinationDir;
     if (defaultTargetPlatform == TargetPlatform.android) {
       final storage = await android_channel.getSaveLocationAndroid();
-      destinationDir = await android_channel.getStorageTreeAndroid(storage: storage) ??
-          settings.destination ??
-          await getDefaultDestinationDirectory();
+      destinationDir =
+          await android_channel.getStorageTreeAndroid(storage: storage) ?? settings.destination ?? await getDefaultDestinationDirectory();
     } else {
       destinationDir = settings.destination ?? await getDefaultDestinationDirectory();
     }
@@ -152,11 +152,7 @@ class ReceiveController {
       // Push before accepting: the permission request in [acceptFileRequest] may block for a while.
       // ignore: use_build_context_synchronously, unawaited_futures
       Routerino.context.pushImmediately(
-        () => ProgressPage(
-          showAppBar: false,
-          closeSessionOnClose: true,
-          sessionId: sessionId,
-        ),
+        () => const TransferProgressPage(),
       );
 
       // accept all files
@@ -218,11 +214,7 @@ class ReceiveController {
           unawaited(
             Routerino.context.pushAndRemoveUntilImmediately(
               removeUntil: ReceivePage,
-              builder: () => ProgressPage(
-                showAppBar: false,
-                closeSessionOnClose: true,
-                sessionId: sessionId,
-              ),
+              builder: () => const TransferProgressPage(),
             ),
           );
 
@@ -433,6 +425,19 @@ class ReceiveController {
       if (quickSave) {
         // close the session **after** the response has been sent
         Future.delayed(Duration.zero, () {
+          if (transferProgressPageVisibility.value > 0) {
+            if (filePath != null && filePath.isNotEmpty) {
+              // ignore: discarded_futures
+              OpenFileDialog.open(
+                Routerino.context, // ignore: use_build_context_synchronously
+                filePath: filePath,
+                fileType: fileType,
+                openGallery: event.savedToGallery,
+              );
+            }
+            return;
+          }
+
           closeSession();
           _logger.info('Closing session');
 

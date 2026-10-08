@@ -6,6 +6,7 @@ import 'package:localsend_app/config/theme.dart';
 import 'package:localsend_app/gen/strings.g.dart';
 import 'package:localsend_app/model/persistence/color_mode.dart';
 import 'package:localsend_app/pages/home_page.dart';
+import 'package:localsend_app/pages/transfer/transfer_dock_overlay.dart';
 import 'package:localsend_app/provider/local_ip_provider.dart';
 import 'package:localsend_app/provider/network/server/server_provider.dart';
 import 'package:localsend_app/provider/settings_provider.dart';
@@ -86,7 +87,13 @@ class LocalSendApp extends StatelessWidget {
               supportedLocales: AppLocaleUtils.supportedLocales,
               localizationsDelegates: GlobalMaterialLocalizations.delegates,
               debugShowCheckedModeBanner: false,
-              builder: (context, child) => LaunchSplashOverlay(child: child ?? const SizedBox.shrink()),
+              builder: (context, child) => Stack(
+                fit: StackFit.expand,
+                children: [
+                  LaunchSplashOverlay(child: child ?? const SizedBox.shrink()),
+                  const TransferDockOverlay(),
+                ],
+              ),
               theme: getTheme(colorMode, customColor, Brightness.light, dynamicColors),
               darkTheme: getTheme(colorMode, customColor, Brightness.dark, dynamicColors),
               themeMode: colorMode == ColorMode.oled ? ThemeMode.dark : themeMode,

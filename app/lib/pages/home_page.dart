@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
@@ -15,6 +16,7 @@ import 'package:localsend_app/pages/tabs/omnidrop_tabs.dart';
 import 'package:localsend_app/pages/tabs/send_tab.dart';
 import 'package:localsend_app/pages/tabs/send_tab_vm.dart';
 import 'package:localsend_app/pages/tabs/settings_tab.dart';
+import 'package:localsend_app/pages/transfer/transfer_progress_page.dart';
 import 'package:localsend_app/provider/network/nearby_devices_provider.dart';
 import 'package:localsend_app/provider/network/scan_facade.dart';
 import 'package:localsend_app/provider/network/send_provider.dart';
@@ -29,7 +31,6 @@ import 'package:localsend_app/widget/glass/glass_card.dart';
 import 'package:localsend_app/widget/list_tile/device_list_tile.dart';
 import 'package:localsend_app/widget/omnidrop_logo.dart';
 import 'package:localsend_app/widget/responsive_builder.dart';
-import 'package:localsend_isolates/model/session_status.dart';
 import 'package:refena_flutter/refena_flutter.dart';
 
 enum HomeTab {
@@ -413,6 +414,11 @@ class _TransferTabState extends State<_TransferTab> with Refena {
 
     final controller = ref.notifier(pairingControllerProvider);
     controller.setTransferring(true);
+    unawaited(
+      Navigator.of(context, rootNavigator: true).push<void>(
+        MaterialPageRoute<void>(builder: (_) => const TransferProgressPage()),
+      ),
+    );
     try {
       await Future.wait(
         peers.map(
@@ -423,6 +429,7 @@ class _TransferTabState extends State<_TransferTab> with Refena {
                 files: files,
                 background: true,
                 skipChecksums: true,
+                retainCompletedSession: true,
               ),
         ),
       );
@@ -580,9 +587,6 @@ class _TransferTabState extends State<_TransferTab> with Refena {
 
   @override
   Widget build(BuildContext context) {
-    final selectedFiles = context.watch(selectedSendingFilesProvider);
-    final sessions = context.watch(sendProvider);
-    final transferInProgress = sessions.values.any((session) => session.status == SessionStatus.sending);
     final colors = Theme.of(context).colorScheme;
     return Stack(
       children: [
@@ -629,33 +633,6 @@ class _TransferTabState extends State<_TransferTab> with Refena {
             ),
           ),
         ),
-        if (selectedFiles.isNotEmpty)
-          Positioned(
-            right: 16,
-            bottom: 66,
-            child: ElevatedGlass(
-              margin: EdgeInsets.zero,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-              radius: glassRadiusPill,
-              blur: true,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (transferInProgress) ...[
-                    SizedBox.square(
-                      dimension: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                  ],
-                  Text('${selectedFiles.length} selected', style: Theme.of(context).textTheme.labelLarge),
-                ],
-              ),
-            ),
-          ),
       ],
     );
   }

@@ -7,7 +7,7 @@ import 'package:localsend_app/model/state/send/send_session_state.dart';
 import 'package:localsend_app/model/state/send/sending_file.dart';
 import 'package:localsend_app/pages/home_page.dart';
 import 'package:localsend_app/pages/home_page_controller.dart';
-import 'package:localsend_app/pages/progress_page.dart';
+import 'package:localsend_app/pages/transfer/transfer_progress_page.dart';
 import 'package:localsend_app/pages/send_page.dart';
 import 'package:localsend_app/provider/device_info_provider.dart';
 import 'package:localsend_app/provider/file_transfer_provider.dart';
@@ -58,6 +58,7 @@ class SendNotifier extends Notifier<Map<String, SendSessionState>> {
   /// is no longer waiting for a decision.
   /// Session ID -> Cancel token
   final _prepareUploadCancelTokens = <String, rust_cancel.RsCancellationToken>{};
+  final _retainedCompletedSessions = <String>{};
 
   @override
   Map<String, SendSessionState> init() {
@@ -83,7 +84,8 @@ class SendNotifier extends Notifier<Map<String, SendSessionState>> {
   }
 
   /// Starts a session.
-  /// If [background] is true, then the session closes itself on success and no pages will be open
+  /// If [background] is true, then the session closes itself on success and no pages will be open,
+  /// unless [retainCompletedSession] is enabled for a multi-recipient progress page.
   /// If [background] is false, then this method will open pages by itself and waits for user input to close the session.
   Future<void> startSession({
     required Device target,
@@ -91,11 +93,17 @@ class SendNotifier extends Notifier<Map<String, SendSessionState>> {
     required bool background,
     // Pairing sends skip the protocol-optional checksum preflight.
     bool skipChecksums = false,
+    // Multi-recipient progress pages need each completed session long enough
+    // to display its final device result.
+    bool retainCompletedSession = false,
   }) async {
     // Pinned to the device the user picked, so the request is not sent at all
     // if someone else answers on that address.
     final client = ref.read(httpProvider).pinnedTo(target.fingerprint);
     final sessionId = _uuid.v4();
+    if (retainCompletedSession) {
+      _retainedCompletedSessions.add(sessionId);
+    }
     final createChecksums = ref.read(settingsProvider).createChecksums && !skipChecksums;
 
     // Assign ids upfront so any optional checksums can be mapped to their files.
@@ -423,11 +431,7 @@ class SendNotifier extends Notifier<Map<String, SendSessionState>> {
               removeUntil: HomePage,
               transition: RouterinoTransition.fade(),
               // immediately is not possible: https://github.com/flutter/flutter/issues/121910
-              builder: () => ProgressPage(
-                showAppBar: background,
-                closeSessionOnClose: !background,
-                sessionId: sessionId,
-              ),
+              builder: () => const TransferProgressPage(),
             )
             .then((_) {
               if (background) {
@@ -516,11 +520,12 @@ class SendNotifier extends Notifier<Map<String, SendSessionState>> {
       _logger.info('Transfer was canceled.');
     } else {
       final hasError = ref.read(fileTransferProvider).getStatuses(sessionId).any((status) => status == FileStatus.failed);
-      if (!hasError && sessionState.background == true) {
+      if (!hasError && sessionState.background == true && !_retainedCompletedSessions.remove(sessionId)) {
         // close session because everything is fine and it is in background
         closeSession(sessionId);
         _logger.info('Transfer finished and session removed.');
       } else {
+        _retainedCompletedSessions.remove(sessionId);
         // keep session alive when there are errors or currently in foreground
         state = state.updateSession(
           sessionId: sessionId,
@@ -782,6 +787,7 @@ class SendNotifier extends Notifier<Map<String, SendSessionState>> {
       return;
     }
     TransferNotification.stop(sessionId);
+    _retainedCompletedSessions.remove(sessionId);
     _hashCancelTokens.remove(sessionId)?.cancel();
     _prepareUploadCancelTokens.remove(sessionId)?.cancel();
     state = state.removeSession(ref, sessionId);
@@ -803,6 +809,7 @@ class SendNotifier extends Notifier<Map<String, SendSessionState>> {
       cancelToken.cancel();
     }
     _prepareUploadCancelTokens.clear();
+    _retainedCompletedSessions.clear();
     state = {};
     ref.notifier(fileTransferProvider).removeAllSessions();
   }

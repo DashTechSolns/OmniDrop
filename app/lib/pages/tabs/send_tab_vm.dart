@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:localsend_app/model/cross_file.dart';
 import 'package:localsend_app/model/persistence/favorite_device.dart';
 import 'package:localsend_app/model/send_mode.dart';
-import 'package:localsend_app/pages/progress_page.dart';
+import 'package:localsend_app/pages/transfer/transfer_progress_page.dart';
 import 'package:localsend_app/pages/send_page.dart';
 import 'package:localsend_app/pages/tabs/send_tab.dart';
 import 'package:localsend_app/pages/web_share_page.dart';
@@ -175,15 +175,15 @@ final sendTabVmProvider = ViewProvider((ref) {
             transition: RouterinoTransition.fade(),
           );
           // Only restore background mode if the user actually backed out.
-          // When the receiver accepts, the provider replaces this page with the ProgressPage,
-          // which also resolves this future; the ProgressPage then owns the background flag.
+          // When the receiver accepts, the provider replaces this page with the transfer page,
+          // which resolves this future and then owns the background flag.
           if (ref.read(sendProvider)[session.sessionId]?.status == SessionStatus.waiting) {
             ref.notifier(sendProvider).setBackground(session.sessionId, true);
           }
           return;
         } else if (session.status == SessionStatus.sending || session.status == SessionStatus.finishedWithErrors) {
           ref.notifier(sendProvider).setBackground(session.sessionId, false);
-          await context.push(() => ProgressPage(showAppBar: true, closeSessionOnClose: false, sessionId: session.sessionId));
+          await context.push(() => const TransferProgressPage());
           ref.notifier(sendProvider).setBackground(session.sessionId, true);
           return;
         }
