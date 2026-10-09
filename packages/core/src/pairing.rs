@@ -9,7 +9,7 @@ use thiserror::Error;
 use tokio::sync::{broadcast, Mutex};
 use uuid::Uuid;
 
-const UNUSED_SESSION_TTL: Duration = Duration::from_secs(5 * 60);
+const PENDING_SESSION_TTL: Duration = Duration::from_secs(2 * 60);
 const EXPIRED_TOKEN_TTL: Duration = Duration::from_secs(5 * 60);
 const EVENT_BUFFER_SIZE: usize = 64;
 const PIN_LENGTH: usize = 6;
@@ -183,12 +183,12 @@ impl PairingSessionManager {
         sender.fingerprint = sender.fingerprint.trim().to_ascii_uppercase();
         sender.alias = sender.alias.trim().to_string();
         let now = Instant::now();
-        let expires_at = now + UNUSED_SESSION_TTL;
+        let expires_at = now + PENDING_SESSION_TTL;
         let expires_at_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis()
-            .saturating_add(UNUSED_SESSION_TTL.as_millis())
+            .saturating_add(PENDING_SESSION_TTL.as_millis())
             .min(u64::MAX as u128) as u64;
         let mut state = self.inner.lock().await;
         prune_expired(&mut state, now);
@@ -463,7 +463,11 @@ fn prune_expired(state: &mut PairingSessionState, now: Instant) {
     let expired: Vec<_> = state
         .sessions
         .iter()
-        .filter(|(_, session)| now >= session.expires_at && !session.transfer_started)
+        .filter(|(_, session)| {
+            now >= session.expires_at
+                && session.joined_devices.is_empty()
+                && !session.transfer_started
+        })
         .map(|(token, _)| token.clone())
         .collect();
     for token in expired {
@@ -588,7 +592,7 @@ mod tests {
         {
             let mut state = manager.inner.lock().await;
             let session = state.sessions.get_mut(&token).unwrap();
-            session.created_at = Instant::now() - UNUSED_SESSION_TTL - Duration::from_secs(1);
+            session.created_at = Instant::now() - PENDING_SESSION_TTL - Duration::from_secs(1);
             session.expires_at = Instant::now() - Duration::from_secs(1);
         }
         assert_eq!(
@@ -747,6 +751,28 @@ mod tests {
             .unwrap();
         manager.finalize(&token).await.unwrap();
         manager.begin_transfer(&token).await.unwrap();
+
+        {
+            let mut state = manager.inner.lock().await;
+            state.sessions.get_mut(&token).unwrap().expires_at = Instant::now() - Duration::from_secs(1);
+        }
+        assert_eq!(
+            manager.snapshot(&token).await.unwrap().joined_devices.len(),
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn paired_session_survives_pending_pairing_expiry() {
+        let manager = PairingSessionManager::default();
+        let token = manager
+            .create(device("sender", "Sender"), false, None, None, true)
+            .await
+            .unwrap();
+        manager
+            .join(&token, device("receiver", "Receiver"), None)
+            .await
+            .unwrap();
 
         {
             let mut state = manager.inner.lock().await;

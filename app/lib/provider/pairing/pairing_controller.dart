@@ -22,11 +22,97 @@ import 'package:localsend_isolates/rust/api/pairing.dart';
 import 'package:localsend_isolates/util/rust.dart';
 import 'package:refena_flutter/refena_flutter.dart';
 
+String _safePairingError(Object error) {
+  return error.toString().replaceAll(
+    RegExp(r'(pin|token|password)\s*[:=]\s*[^,\s]+', caseSensitive: false),
+    r'$1=[redacted]',
+  );
+}
+
+bool _isPairingPinError(Object error) => error.toString().toLowerCase().contains('pin');
+
 final pairingControllerProvider = NotifierProvider<PairingController, PairingState>((ref) => PairingController());
+final pairingConnectionProvider = NotifierProvider<PairingConnectionController, PairingConnectionState>(
+  (ref) => PairingConnectionController(),
+);
 
 enum PairingMode { qr, sameNetwork }
 
 enum PairingRole { sender, receiver }
+
+class PairingConnectionState {
+  final PairingRole? role;
+  final String? sessionToken;
+  final List<PairingDeviceInfo> peers;
+  final int activeTransferCount;
+  final Set<String> lastSelectedFingerprints;
+
+  const PairingConnectionState({
+    this.role,
+    this.sessionToken,
+    this.peers = const [],
+    this.activeTransferCount = 0,
+    this.lastSelectedFingerprints = const {},
+  });
+
+  bool get isConnected => peers.isNotEmpty;
+}
+
+class PairingConnectionController extends Notifier<PairingConnectionState> {
+  @override
+  PairingConnectionState init() => const PairingConnectionState();
+
+  void connect({required PairingRole role, required String? sessionToken, required List<PairingDeviceInfo> peers}) {
+    final peerFingerprints = peers.map((peer) => peer.fingerprint).toSet();
+    final remembered = state.sessionToken == sessionToken ? state.lastSelectedFingerprints : const <String>{};
+    state = PairingConnectionState(
+      role: role,
+      sessionToken: sessionToken,
+      peers: List.unmodifiable(peers),
+      activeTransferCount: state.sessionToken == sessionToken ? state.activeTransferCount : 0,
+      lastSelectedFingerprints: remembered.intersection(peerFingerprints),
+    );
+  }
+
+  void updatePeers(List<PairingDeviceInfo> peers) {
+    if (!state.isConnected) return;
+    final peerFingerprints = peers.map((peer) => peer.fingerprint).toSet();
+    state = PairingConnectionState(
+      role: state.role,
+      sessionToken: state.sessionToken,
+      peers: List.unmodifiable(peers),
+      activeTransferCount: state.activeTransferCount,
+      lastSelectedFingerprints: state.lastSelectedFingerprints.intersection(peerFingerprints),
+    );
+  }
+
+  void setActiveTransferCount(int count) {
+    final safeCount = count < 0 ? 0 : count;
+    if (safeCount == state.activeTransferCount) return;
+    state = PairingConnectionState(
+      role: state.role,
+      sessionToken: state.sessionToken,
+      peers: state.peers,
+      activeTransferCount: safeCount,
+      lastSelectedFingerprints: state.lastSelectedFingerprints,
+    );
+  }
+
+  void rememberSelection(Set<String> fingerprints) {
+    final peerFingerprints = state.peers.map((peer) => peer.fingerprint).toSet();
+    state = PairingConnectionState(
+      role: state.role,
+      sessionToken: state.sessionToken,
+      peers: state.peers,
+      activeTransferCount: state.activeTransferCount,
+      lastSelectedFingerprints: fingerprints.intersection(peerFingerprints),
+    );
+  }
+
+  void clear() {
+    state = const PairingConnectionState();
+  }
+}
 
 enum PairingPhase {
   idle,
@@ -68,6 +154,17 @@ class PairingOptions {
       throw const FormatException('PIN must be exactly six digits.');
     }
     return pin;
+  }
+
+  HttpServerPairingTask toSessionTask({required PairingDeviceInfo sender, required int avatarIndex}) {
+    return HttpServerPairingTask(
+      operation: HttpServerPairingOperation.create,
+      sender: sender,
+      discoverable: mode == PairingMode.sameNetwork,
+      avatarIndex: avatarIndex,
+      pin: validatedPin,
+      multiRecipient: multiRecipient,
+    );
   }
 }
 
@@ -177,7 +274,7 @@ class PairingState {
 }
 
 class PairingController extends Notifier<PairingState> {
-  static const sessionLifetime = Duration(minutes: 5);
+  static const sessionLifetime = Duration(minutes: 2);
 
   android_channel.AndroidLocalOnlyHotspot? _hotspot;
   Timer? _expiryTimer;
@@ -264,18 +361,12 @@ class PairingController extends Notifier<PairingState> {
         protocol: localDevice.https ? rust_model.ProtocolType.https : rust_model.ProtocolType.http,
         hasWebInterface: localDevice.download,
       );
+      _log('sender_server_ready', 'HTTP server ready at ${sender.ip}:${sender.port} (${sender.protocol.name})');
       final createStream = ref
           .redux(parentIsolateProvider)
           .dispatchTakeResult(
             IsolateHttpServerPairingAction(
-              task: HttpServerPairingTask(
-                operation: HttpServerPairingOperation.create,
-                sender: sender,
-                discoverable: options.mode == PairingMode.sameNetwork,
-                avatarIndex: ref.read(persistenceProvider).getProfileAvatar() % 6,
-                pin: pin,
-                multiRecipient: options.multiRecipient,
-              ),
+              task: options.toSessionTask(sender: sender, avatarIndex: ref.read(persistenceProvider).getProfileAvatar() % 6),
             ),
           );
       final created =
@@ -311,7 +402,9 @@ class PairingController extends Notifier<PairingState> {
       );
       _log('session_ready', 'Pairing session is ready');
       _listenToSession(token);
-      _expiryTimer = Timer(sessionLifetime, () => unawaited(stop(expired: true)));
+      _expiryTimer = Timer(sessionLifetime, () {
+        if (state.peers.isEmpty) unawaited(stop(expired: true));
+      });
     } catch (error) {
       _log('sender_failed', 'Pairing session could not be started');
       await _cleanupFailedStart();
@@ -335,10 +428,14 @@ class PairingController extends Notifier<PairingState> {
           final pairingEvent = event.event! as RsPairingEvent_DeviceJoined;
           final device = pairingEvent.device.device;
           final updated = [...state.peers.where((peer) => peer.fingerprint != device.fingerprint), device];
+          _expiryTimer?.cancel();
+          _expiryTimer = null;
           state = state.copyWith(
             phase: state.phase == PairingPhase.closedForSelection ? PairingPhase.closedForSelection : PairingPhase.peerJoined,
             peers: updated,
           );
+          ref.notifier(pairingConnectionProvider).connect(role: PairingRole.sender, sessionToken: token, peers: updated);
+          unawaited(_keepPairingServiceAlive());
           _log('peer_joined', 'A receiver joined the pairing session');
         },
         onError: (Object error) {
@@ -369,6 +466,8 @@ class PairingController extends Notifier<PairingState> {
     _log('control_event', 'Pairing control event received');
     switch (event) {
       case 'paired':
+        _expiryTimer?.cancel();
+        _expiryTimer = null;
         state = state.copyWith(
           phase: state.multiRecipient ? PairingPhase.peerJoined : PairingPhase.closedForSelection,
           controlEvent: event,
@@ -401,6 +500,7 @@ class PairingController extends Notifier<PairingState> {
         phase: PairingPhase.closedForSelection,
         peers: result.snapshot!.joinedDevices.map((joined) => joined.device).toList(),
       );
+      ref.notifier(pairingConnectionProvider).updatePeers(state.peers);
     } catch (error) {
       state = state.copyWith(phase: PairingPhase.failed, failureReason: error.toString());
     }
@@ -419,11 +519,9 @@ class PairingController extends Notifier<PairingState> {
 
   Future<void> stop({bool expired = false, bool disconnected = false}) async {
     if (_stopping) return;
-    if (state.sessionToken == null && _hotspot == null) {
-      state = state.copyWith(phase: PairingPhase.stopped);
-      return;
-    }
+    if (expired && state.peers.isNotEmpty) return;
     _stopping = true;
+    final previousState = state;
     _log(
       expired
           ? 'session_expired'
@@ -452,6 +550,13 @@ class PairingController extends Notifier<PairingState> {
         failure = error;
       }
     }
+    if (previousState.role == PairingRole.receiver && previousState.ssid != null && checkPlatform([TargetPlatform.android])) {
+      try {
+        await android_channel.disconnectFromWifiHotspotAndroid();
+      } catch (error) {
+        failure ??= error;
+      }
+    }
     for (final subscription in _sessionSubscriptions) {
       await subscription.cancel();
     }
@@ -465,16 +570,30 @@ class PairingController extends Notifier<PairingState> {
         failure ??= error;
       }
     }
+    if (checkPlatform([TargetPlatform.android]) && !shouldStopHotspot && (!disconnected || previousState.role == PairingRole.receiver)) {
+      try {
+        await android_channel.stopPairingKeepAliveAndroid();
+      } catch (error) {
+        failure ??= error;
+      }
+    }
     state = state.copyWith(
-      phase: failure == null ? PairingPhase.stopped : PairingPhase.failed,
+      phase: failure == null ? (expired ? PairingPhase.stopped : PairingPhase.idle) : PairingPhase.failed,
       sessionToken: null,
       qrPayload: null,
       ssid: null,
       password: null,
       expiresAt: null,
       peers: const [],
-      failureReason: failure?.toString(),
+      role: null,
+      mode: null,
+      pin: null,
+      pinRequired: false,
+      failureReason: failure?.toString() ?? (expired ? 'Pairing session expired.' : null),
     );
+    _lastQrPayload = null;
+    _lastNearbyOffer = null;
+    ref.notifier(pairingConnectionProvider).clear();
     _stopping = false;
   }
 
@@ -517,6 +636,7 @@ class PairingController extends Notifier<PairingState> {
       return;
     }
     try {
+      await _listenForNativeDisconnect();
       final result = await android_channel.enableWifiAndroid();
       if (!result.success) {
         state = state.copyWith(
@@ -632,10 +752,20 @@ class PairingController extends Notifier<PairingState> {
           );
       if (!response.success) throw StateError('The pairing session was rejected by the sender.');
       state = state.copyWith(phase: PairingPhase.joined, failureReason: null);
+      ref.notifier(pairingConnectionProvider).connect(role: PairingRole.receiver, sessionToken: payload.sessionToken, peers: [response.sender]);
+      await _keepPairingServiceAlive();
+      _log(
+        'join_result',
+        'POST ${_joinUrl(payload.https, payload.ip, payload.port)} -> HTTP 200; ${pin == null ? 'PIN not required' : 'PIN accepted'}',
+      );
       _log('join_succeeded', 'Joined pairing session');
     } catch (error) {
       final status = error is RsHttpClientError_StatusCode ? error.status : null;
-      final pinRequired = status == 403;
+      final pinRequired = status == 403 && (payload.pinRequired || _isPairingPinError(error));
+      _log(
+        'join_result',
+        'POST ${_joinUrl(payload.https, payload.ip, payload.port)} -> HTTP ${status ?? 'error'}: ${_safePairingError(error)}${pinRequired ? '; PIN rejected or required' : ''}',
+      );
       state = state.copyWith(
         phase: pinRequired ? PairingPhase.waitingForPin : PairingPhase.failed,
         pinRequired: pinRequired || payload.pinRequired,
@@ -662,23 +792,37 @@ class PairingController extends Notifier<PairingState> {
     try {
       ref.redux(nearbyDevicesProvider).dispatch(ClearFoundDevicesAction());
       await ref.global.dispatchAsync(StartSmartScan());
-      final devices = ref.read(nearbyDevicesProvider).devices.values.where((device) => device.ip != null && device.port > 0).toList();
+      final discoveredDevices = ref.read(nearbyDevicesProvider).devices.values.toList();
+      for (final device in discoveredDevices) {
+        final ip = device.ip ?? 'unknown IP';
+        final protocol = device.https ? rust_model.ProtocolType.https : rust_model.ProtocolType.http;
+        _log('device_found', 'Found ${device.alias} at $ip:${device.port} (${protocol.name})');
+      }
+      final devices = discoveredDevices.where((device) => device.ip != null && device.port > 0).toList();
       final offers = <PairingNearbyOffer>[];
       for (final device in devices) {
+        final protocol = device.https ? rust_model.ProtocolType.https : rust_model.ProtocolType.http;
+        final url = _sendOfferUrl(device.https, device.ip!, device.port);
         try {
           final offer = await ref
               .read(httpProvider)
               .pinnedTo(device.fingerprint, timeout: const Duration(milliseconds: 900))
               .sendOffer(
-                protocol: device.https ? rust_model.ProtocolType.https : rust_model.ProtocolType.http,
+                protocol: protocol,
                 ip: device.ip!,
                 port: device.port,
               );
           if (offer != null && offer.expiresAtMs.toInt() > DateTime.now().millisecondsSinceEpoch) {
             offers.add(PairingNearbyOffer(device: device, offer: offer));
+            _log('send_offer_result', 'GET $url -> HTTP 200; active offer found');
+          } else if (offer == null) {
+            _log('send_offer_result', 'GET $url -> HTTP 404; no active offer');
+          } else {
+            _log('send_offer_result', 'GET $url -> HTTP 200; expired offer ignored');
           }
-        } catch (_) {
-          // A discovery result without an active pairing offer is not actionable.
+        } catch (error) {
+          final status = error is RsHttpClientError_StatusCode ? error.status : null;
+          _log('send_offer_error', 'GET $url -> HTTP ${status ?? 'error'}: ${_safePairingError(error)}');
         }
       }
       state = state.copyWith(phase: PairingPhase.scanning, offers: offers);
@@ -714,10 +858,20 @@ class PairingController extends Notifier<PairingState> {
           );
       if (!response.success) throw StateError('The pairing session was rejected by the sender.');
       state = state.copyWith(phase: PairingPhase.joined);
+      ref.notifier(pairingConnectionProvider).connect(role: PairingRole.receiver, sessionToken: item.offer.joinToken, peers: [response.sender]);
+      await _keepPairingServiceAlive();
+      _log(
+        'join_result',
+        'POST ${_joinUrl(item.device.https, item.device.ip!, item.device.port)} -> HTTP 200; ${pin == null ? 'PIN not required' : 'PIN accepted'}',
+      );
       _log('nearby_join_succeeded', 'Joined nearby pairing session');
     } catch (error) {
       final status = error is RsHttpClientError_StatusCode ? error.status : null;
-      final pinRequired = status == 403;
+      final pinRequired = status == 403 && _isPairingPinError(error);
+      _log(
+        'join_result',
+        'POST ${_joinUrl(item.device.https, item.device.ip!, item.device.port)} -> HTTP ${status ?? 'error'}: ${_safePairingError(error)}${pinRequired ? '; PIN rejected or required' : ''}',
+      );
       state = state.copyWith(
         phase: pinRequired ? PairingPhase.waitingForPin : PairingPhase.failed,
         pinRequired: pinRequired,
@@ -746,11 +900,21 @@ class PairingController extends Notifier<PairingState> {
   }
 
   Future<Device> _ensureLocalServer() async {
-    if (ref.read(serverProvider) == null) await ref.notifier(serverProvider).startServerFromSettings();
+    if (ref.read(serverProvider) == null) {
+      _log('receiver_server_start', 'Starting the local HTTP server for pairing');
+      await ref.notifier(serverProvider).startServerFromSettings();
+    }
     final device = ref.read(deviceFullInfoProvider);
     if (device.port < 1 || device.ip == '-') throw StateError('The local receive server has no usable host address.');
+    _log('receiver_server_ready', 'Local HTTP server ready at ${device.ip}:${device.port} (${device.https ? 'https' : 'http'})');
     return device;
   }
+
+  String _sendOfferUrl(bool https, String ip, int port) =>
+      Uri(scheme: https ? 'https' : 'http', host: ip, port: port, path: '/api/omnidrop/v1/send-offer').toString();
+
+  String _joinUrl(bool https, String ip, int port) =>
+      Uri(scheme: https ? 'https' : 'http', host: ip, port: port, path: '/api/omnidrop/v1/join').toString();
 
   Future<List<PairingLogEntry>> readPairingLog() async {
     final nativeEntries = checkPlatform([TargetPlatform.android])
@@ -770,5 +934,15 @@ class PairingController extends Notifier<PairingState> {
   Future<void> _listenForNativeDisconnect() async {
     if (!checkPlatform([TargetPlatform.android]) || _disconnectSubscription != null) return;
     _disconnectSubscription = android_channel.pairingDisconnectEvents.listen((_) => unawaited(stop(disconnected: true)));
+  }
+
+  Future<void> _keepPairingServiceAlive() async {
+    if (!checkPlatform([TargetPlatform.android])) return;
+    try {
+      await android_channel.startPairingKeepAliveAndroid();
+      _log('service_keepalive_started', 'Pairing foreground service is keeping the connection alive');
+    } catch (error) {
+      _log('service_keepalive_failed', 'Could not keep the pairing connection alive: ${_safePairingError(error)}');
+    }
   }
 }

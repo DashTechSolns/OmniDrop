@@ -7,6 +7,7 @@ import 'package:localsend_app/pages/transfer/transfer_dock_visibility.dart';
 import 'package:localsend_app/pages/transfer/transfer_progress_page.dart';
 import 'package:localsend_app/provider/network/send_provider.dart';
 import 'package:localsend_app/provider/network/server/server_provider.dart';
+import 'package:localsend_app/provider/pairing/pairing_controller.dart';
 import 'package:localsend_app/provider/selection/selected_sending_files_provider.dart';
 import 'package:localsend_isolates/model/session_status.dart';
 import 'package:logging/logging.dart';
@@ -66,6 +67,12 @@ class _TransferDockOverlayState extends State<TransferDockOverlay> with Refena {
     final sendSessions = ref.read(sendProvider).values.toList();
     final receiveSession = ref.read(serverProvider)?.session;
     final active = sendSessions.any((session) => session.status == SessionStatus.sending) || receiveSession?.status == SessionStatus.sending;
+    final activeTransferCount =
+        sendSessions.where((session) => session.status == SessionStatus.waiting || session.status == SessionStatus.sending).length +
+        (receiveSession?.status == SessionStatus.sending ? 1 : 0);
+    if (ref.read(pairingConnectionProvider).isConnected) {
+      ref.notifier(pairingConnectionProvider).setActiveTransferCount(activeTransferCount);
+    }
     final sessionPresent =
         sendSessions.any(
           (session) =>

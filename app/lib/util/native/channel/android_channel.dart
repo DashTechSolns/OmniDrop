@@ -70,20 +70,16 @@ Future<Uint8List?> loadMediaThumbnailAndroid({required String uri, required Stri
 
 Future<String?> pickFolderTreeAndroid() => pickStorageTreeAndroid();
 
-Future<String?> pickStorageTreeAndroid({String storage = 'internal'}) =>
-  _methodChannel.invokeMethod<String>('pickStorageTree', {'storage': storage});
+Future<String?> pickStorageTreeAndroid({String storage = 'internal'}) => _methodChannel.invokeMethod<String>('pickStorageTree', {'storage': storage});
 
-Future<String?> getStorageTreeAndroid({String storage = 'internal'}) =>
-  _methodChannel.invokeMethod<String>('getStorageTree', {'storage': storage});
+Future<String?> getStorageTreeAndroid({String storage = 'internal'}) => _methodChannel.invokeMethod<String>('getStorageTree', {'storage': storage});
 
-Future<String> getSaveLocationAndroid() async =>
-  await _methodChannel.invokeMethod<String>('getSaveLocation') ?? 'internal';
+Future<String> getSaveLocationAndroid() async => await _methodChannel.invokeMethod<String>('getSaveLocation') ?? 'internal';
 
-Future<bool> hasRemovableStorageAndroid() async =>
-  await _methodChannel.invokeMethod<bool>('hasRemovableStorage') ?? false;
+Future<bool> hasRemovableStorageAndroid() async => await _methodChannel.invokeMethod<bool>('hasRemovableStorage') ?? false;
 
 Future<bool> setSaveLocationAndroid({required String storage}) async =>
-  await _methodChannel.invokeMethod<bool>('setSaveLocation', {'storage': storage}) ?? false;
+    await _methodChannel.invokeMethod<bool>('setSaveLocation', {'storage': storage}) ?? false;
 
 Future<List<AndroidBrowseEntry>> listFolderTreeAndroid({required String uri}) async {
   final result = await _methodChannel.invokeMethod<List>('listFolderTree', {'uri': uri});
@@ -189,6 +185,14 @@ Future<AndroidLocalOnlyHotspot> startLocalOnlyHotspotAndroid({bool prefer5GHz = 
 
 Future<void> stopLocalOnlyHotspotAndroid() async {
   await _methodChannel.invokeMethod<void>('stopLocalOnlyHotspot');
+}
+
+Future<void> startPairingKeepAliveAndroid() async {
+  await _methodChannel.invokeMethod<void>('startPairingKeepAlive');
+}
+
+Future<void> stopPairingKeepAliveAndroid() async {
+  await _methodChannel.invokeMethod<void>('stopPairingKeepAlive');
 }
 
 Future<AndroidHotspotConnectionResult> connectToWifiHotspotAndroid({required String ssid, required String password}) async {

@@ -85,6 +85,9 @@ const _saveToGallery = 'ls_save_to_gallery';
 const _saveToHistory = 'ls_save_to_history';
 const _quickSave = 'ls_quick_save'; // a QuickSaveMode; was a bool until storage version 2 ('ls_quick_save_from_favorites' is merged into this key)
 const _receivePin = 'ls_receive_pin';
+const _pairingMultiRecipient = 'od_pairing_multi_recipient';
+const _pairingPinProtection = 'od_pairing_pin_protection';
+const _pairingEncrypted = 'od_pairing_encrypted';
 const _autoFinish = 'ls_auto_finish';
 const _minimizeToTray = 'ls_minimize_to_tray';
 const _https = 'ls_https';
@@ -484,6 +487,24 @@ class PersistenceService {
     } else {
       await _prefs.setString(_receivePin, pin);
     }
+  }
+
+  bool isPairingMultiRecipient() => _prefs.getBool(_pairingMultiRecipient) ?? false;
+
+  Future<void> setPairingMultiRecipient(bool enabled) async {
+    await _prefs.setBool(_pairingMultiRecipient, enabled);
+  }
+
+  bool isPairingPinProtectionEnabled() => _prefs.getBool(_pairingPinProtection) ?? false;
+
+  Future<void> setPairingPinProtectionEnabled(bool enabled) async {
+    await _prefs.setBool(_pairingPinProtection, enabled);
+  }
+
+  bool isPairingEncrypted() => _prefs.getBool(_pairingEncrypted) ?? isHttps();
+
+  Future<void> setPairingEncrypted(bool enabled) async {
+    await _prefs.setBool(_pairingEncrypted, enabled);
   }
 
   bool isAutoFinish() {

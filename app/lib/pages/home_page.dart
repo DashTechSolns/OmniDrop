@@ -21,6 +21,7 @@ import 'package:localsend_app/provider/network/nearby_devices_provider.dart';
 import 'package:localsend_app/provider/network/scan_facade.dart';
 import 'package:localsend_app/provider/network/send_provider.dart';
 import 'package:localsend_app/provider/pairing/pairing_controller.dart';
+import 'package:localsend_app/provider/network/server/server_provider.dart';
 import 'package:localsend_app/provider/selection/selected_sending_files_provider.dart';
 import 'package:localsend_app/util/native/channel/android_channel.dart' as android_channel;
 import 'package:localsend_app/util/native/cross_file_converters.dart';
@@ -31,6 +32,8 @@ import 'package:localsend_app/widget/glass/glass_card.dart';
 import 'package:localsend_app/widget/list_tile/device_list_tile.dart';
 import 'package:localsend_app/widget/omnidrop_logo.dart';
 import 'package:localsend_app/widget/responsive_builder.dart';
+import 'package:localsend_isolates/model/session_status.dart';
+import 'package:localsend_isolates/rust/api/pairing.dart';
 import 'package:refena_flutter/refena_flutter.dart';
 
 enum HomeTab {
@@ -403,43 +406,88 @@ class _TransferTab extends StatefulWidget {
 
 class _TransferTabState extends State<_TransferTab> with Refena {
   Future<void> _openSendPairingCard() async {
-    final peers = await showPairingSendCard(context, onSendOverLan: _startSend);
-    if (!mounted || peers == null || peers.isEmpty) return;
-    var files = ref.read(selectedSendingFilesProvider);
-    if (files.isEmpty) {
-      await AddFileDialog.open(context: context, options: pickerOptions);
-      files = ref.read(selectedSendingFilesProvider);
+    if (ref.read(pairingConnectionProvider).isConnected) {
+      await _sendToConnectedPeers();
+      return;
     }
-    if (!mounted || files.isEmpty) return;
+    await showPairingSendCard(context, onSendOverLan: _startSend);
+  }
 
-    final controller = ref.notifier(pairingControllerProvider);
-    controller.setTransferring(true);
+  Future<void> _sendToConnectedPeers() async {
+    final connection = ref.read(pairingConnectionProvider);
+    var files = ref.read(selectedSendingFilesProvider);
+    if (files.isEmpty || connection.peers.isEmpty) return;
+
+    List<PairingDeviceInfo> targets;
+    if (connection.peers.length == 1) {
+      targets = pairingTargetsForSelection(connection.peers, const {});
+    } else {
+      final selected = await showPairingTargetPicker(
+        context,
+        peers: connection.peers,
+        sessionToken: connection.sessionToken,
+        initialSelection: connection.lastSelectedFingerprints,
+      );
+      if (!mounted || selected == null) return;
+      final current = ref.read(pairingConnectionProvider);
+      targets = pairingTargetsForSelection(current.peers, selected);
+      ref.notifier(pairingConnectionProvider).rememberSelection(selected);
+    }
+    if (targets.isEmpty) return;
+
     unawaited(
       Navigator.of(context, rootNavigator: true).push<void>(
         MaterialPageRoute<void>(builder: (_) => const TransferProgressPage()),
       ),
     );
-    try {
-      await Future.wait(
-        peers.map(
-          (peer) => ref
-              .notifier(sendProvider)
-              .startSession(
-                target: DeviceFromPairingInfo.convert(peer),
-                files: files,
-                background: true,
-                skipChecksums: true,
-                retainCompletedSession: true,
-              ),
+    unawaited(() async {
+      try {
+        await Future.wait<void>(
+          targets.map(
+            (peer) => ref
+                .notifier(sendProvider)
+                .startSession(
+                  target: DeviceFromPairingInfo.convert(peer),
+                  files: files,
+                  background: true,
+                  skipChecksums: true,
+                  retainCompletedSession: true,
+                ),
+          ),
+        );
+      } catch (error) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+    }());
+  }
+
+  Future<void> _disconnect() async {
+    final connection = ref.read(pairingConnectionProvider);
+    final activeSendSessions = ref
+        .read(sendProvider)
+        .values
+        .where((session) => session.status == SessionStatus.waiting || session.status == SessionStatus.sending)
+        .toList();
+    final receiving = ref.read(serverProvider)?.session?.status == SessionStatus.sending;
+    if (connection.activeTransferCount > 0 || activeSendSessions.isNotEmpty || receiving) {
+      final disconnectAnyway = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('A transfer is still in progress'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Disconnect anyway')),
+          ],
         ),
       );
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
+      if (disconnectAnyway != true || !mounted) return;
+      for (final session in activeSendSessions) {
+        ref.notifier(sendProvider).cancelSession(session.sessionId);
       }
-    } finally {
-      controller.setTransferring(false);
+      final receiveSession = ref.read(serverProvider)?.session;
+      if (receiveSession?.status == SessionStatus.sending) ref.notifier(serverProvider).cancelSession();
     }
+    await ref.notifier(pairingControllerProvider).stop();
   }
 
   Future<void> _startSend() async {
@@ -588,6 +636,8 @@ class _TransferTabState extends State<_TransferTab> with Refena {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final connection = ref.watch(pairingConnectionProvider);
+    final selectedFiles = ref.watch(selectedSendingFilesProvider);
     return Stack(
       children: [
         Positioned.fill(
@@ -596,6 +646,19 @@ class _TransferTabState extends State<_TransferTab> with Refena {
             child: const SendTab(),
           ),
         ),
+        if (connection.isConnected && selectedFiles.isNotEmpty)
+          Positioned(
+            bottom: 82,
+            left: 16,
+            right: 16,
+            child: Center(
+              child: FilledButton.icon(
+                onPressed: _sendToConnectedPeers,
+                icon: const Icon(Icons.send),
+                label: Text('Send (${selectedFiles.length})'),
+              ),
+            ),
+          ),
         Positioned(
           bottom: 10,
           left: 16,
@@ -603,33 +666,43 @@ class _TransferTabState extends State<_TransferTab> with Refena {
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 520),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: AnimatedPress(
-                      child: FilledButton.icon(
-                        onPressed: _openSendPairingCard,
-                        icon: const Icon(Icons.send),
-                        label: const Text(PairingStrings.send),
+              child: connection.isConnected
+                  ? FilledButton.tonalIcon(
+                      onPressed: _disconnect,
+                      icon: const Icon(Icons.link_off),
+                      label: Text(
+                        connection.peers.length == 1
+                            ? 'Disconnect · ${connection.peers.single.alias}'
+                            : 'Disconnect · ${connection.peers.length} devices',
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: AnimatedPress(
-                      child: FilledButton.tonalIcon(
-                        onPressed: () => showPairingReceiveCard(context),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: colors.secondaryContainer,
-                          foregroundColor: colors.onSecondaryContainer,
+                    )
+                  : Row(
+                      children: [
+                        Expanded(
+                          child: AnimatedPress(
+                            child: FilledButton.icon(
+                              onPressed: _openSendPairingCard,
+                              icon: const Icon(Icons.send),
+                              label: const Text(PairingStrings.send),
+                            ),
+                          ),
                         ),
-                        icon: const Icon(Icons.download),
-                        label: const Text('Receive'),
-                      ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: AnimatedPress(
+                            child: FilledButton.tonalIcon(
+                              onPressed: () => showPairingReceiveCard(context),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: colors.secondaryContainer,
+                                foregroundColor: colors.onSecondaryContainer,
+                              ),
+                              icon: const Icon(Icons.download),
+                              label: const Text('Receive'),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
-              ),
             ),
           ),
         ),

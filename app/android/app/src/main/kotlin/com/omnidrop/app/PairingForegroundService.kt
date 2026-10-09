@@ -86,6 +86,7 @@ class PairingForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> startHotspot()
+            ACTION_KEEP_ALIVE -> startKeepAlive()
             ACTION_STOP -> stopPairing(intent?.getStringExtra(EXTRA_STOP_REASON) ?: "user_disconnect")
             else -> stopSelf(startId)
         }
@@ -154,6 +155,11 @@ class PairingForegroundService : Service() {
 
                     override fun onStopped() {
                         hotspotReservation = null
+                        if (!explicitlyStopped) {
+                            PairingNativeLog.append(this@PairingForegroundService, "teardown_reason", "hotspot_stopped")
+                            sendBroadcast(Intent(ACTION_PAIRING_DISCONNECTED).setPackage(packageName))
+                            stopSelf()
+                        }
                     }
 
                     override fun onFailed(reason: Int) {
@@ -172,6 +178,30 @@ class PairingForegroundService : Service() {
             failToStart("HOTSPOT_PERMISSION_DENIED", error.message ?: "Android denied permission to start the hotspot.")
         } catch (error: RuntimeException) {
             failToStart("HOTSPOT_START_FAILED", error.message ?: "Android could not start the local-only hotspot.")
+        }
+    }
+
+    private fun startKeepAlive() {
+        try {
+            ensureNotificationChannel()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    createNotification("Pairing connection active"),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, createNotification("Pairing connection active"))
+            }
+            hotspotStartResultSent = true
+            PairingNativeLog.markServiceActive(this)
+            PairingNativeLog.append(this, "service_started", "Pairing connection foreground service started")
+        } catch (error: SecurityException) {
+            PairingNativeLog.append(this, "service_started", "failed")
+            stopSelf()
+        } catch (error: RuntimeException) {
+            PairingNativeLog.append(this, "service_started", "failed")
+            stopSelf()
         }
     }
 
@@ -240,7 +270,7 @@ class PairingForegroundService : Service() {
         }
     }
 
-    private fun createNotification(): Notification {
+    private fun createNotification(text: String = "Hotspot active"): Notification {
         val disconnectIntent = Intent(this, PairingForegroundService::class.java)
             .setAction(ACTION_STOP)
             .putExtra(EXTRA_STOP_REASON, "notification_disconnect")
@@ -253,7 +283,7 @@ class PairingForegroundService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("OmniDrop pairing")
-            .setContentText("Hotspot active")
+            .setContentText(text)
             .setOngoing(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Disconnect", disconnectPendingIntent)
@@ -284,6 +314,7 @@ class PairingForegroundService : Service() {
 
     companion object {
         const val ACTION_START = "com.omnidrop.app.action.START_PAIRING_HOTSPOT"
+        const val ACTION_KEEP_ALIVE = "com.omnidrop.app.action.KEEP_PAIRING_ALIVE"
         const val ACTION_STOP = "com.omnidrop.app.action.STOP_PAIRING_HOTSPOT"
         const val ACTION_HOTSPOT_RESULT = "com.omnidrop.app.action.PAIRING_HOTSPOT_RESULT"
         const val ACTION_PAIRING_DISCONNECTED = "com.omnidrop.app.action.PAIRING_DISCONNECTED"

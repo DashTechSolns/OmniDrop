@@ -302,6 +302,12 @@ class MainActivity : FlutterActivity() {
 
                 "getNativePairingLog" -> result.success(PairingNativeLog.read(this))
 
+                "startPairingKeepAlive" ->
+                    startPairingServiceCommand(PairingForegroundService.ACTION_KEEP_ALIVE, result)
+
+                "stopPairingKeepAlive" ->
+                    startPairingServiceCommand(PairingForegroundService.ACTION_STOP, result)
+
                 "startLocalOnlyHotspot" -> startLocalOnlyHotspot(
                     prefer5GHz = call.argument<Boolean>("prefer5GHz") == true,
                     result = result,
@@ -449,6 +455,9 @@ class MainActivity : FlutterActivity() {
             } else {
                 startService(intent)
             }
+            if (action != PairingForegroundService.ACTION_START) {
+                result?.success(null)
+            }
         } catch (error: SecurityException) {
             handlePairingServiceCommandError(action, error, result)
         } catch (error: RuntimeException) {
@@ -457,14 +466,18 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun handlePairingServiceCommandError(action: String, error: RuntimeException, result: MethodChannel.Result?) {
-        val message = error.message ?: "Android could not ${if (action == PairingForegroundService.ACTION_START) "start" else "stop"} the pairing service."
+        val message = error.message
+            ?: "Android could not ${if (action == PairingForegroundService.ACTION_STOP) "stop" else "start"} the pairing service."
         if (action == PairingForegroundService.ACTION_START) {
             PairingNativeLog.append(this, "service_started", "failed")
             pendingHotspotResult?.error("HOTSPOT_SERVICE_FAILED", message, null)
             pendingHotspotResult = null
-        } else {
+        } else if (action == PairingForegroundService.ACTION_STOP) {
             PairingNativeLog.append(this, "teardown_reason", "stop_failed")
             result?.error("HOTSPOT_STOP_FAILED", message, null)
+        } else {
+            PairingNativeLog.append(this, "service_started", "failed")
+            result?.error("PAIRING_SERVICE_FAILED", message, null)
         }
     }
 
@@ -648,6 +661,7 @@ class MainActivity : FlutterActivity() {
             if (connectivityManager.boundNetworkForProcess == network) {
                 if (connectivityManager.bindProcessToNetwork(null)) {
                     PairingNativeLog.append(this, "teardown_reason", "receiver_network_lost")
+                    sendBroadcast(Intent(PairingForegroundService.ACTION_PAIRING_DISCONNECTED).setPackage(packageName))
                 } else {
                     PairingNativeLog.append(this, "bind_result", "unbind_failed")
                 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -19,16 +20,13 @@ import 'package:pretty_qr_code/pretty_qr_code.dart';
 import 'package:refena_flutter/refena_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-Future<List<PairingDeviceInfo>?> showPairingSendCard(
+Future<void> showPairingSendCard(
   BuildContext context, {
   required Future<void> Function() onSendOverLan,
 }) {
-  return showModalBottomSheet<List<PairingDeviceInfo>>(
+  return showDialog<void>(
     context: context,
-    isScrollControlled: true,
-    enableDrag: false,
-    isDismissible: false,
-    backgroundColor: Colors.transparent,
+    barrierDismissible: false,
     builder: (_) => _PairingSheet(
       child: _SendPairingCard(onSendOverLan: onSendOverLan),
     ),
@@ -36,12 +34,9 @@ Future<List<PairingDeviceInfo>?> showPairingSendCard(
 }
 
 Future<void> showPairingReceiveCard(BuildContext context, {bool allowWebDropLinks = false}) {
-  return showModalBottomSheet<void>(
+  return showDialog<void>(
     context: context,
-    isScrollControlled: true,
-    enableDrag: false,
-    isDismissible: false,
-    backgroundColor: Colors.transparent,
+    barrierDismissible: false,
     builder: (_) => _PairingSheet(
       child: _ReceivePairingCard(allowWebDropLinks: allowWebDropLinks),
     ),
@@ -56,15 +51,17 @@ class _PairingSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
-    final height = media.size.height - media.viewInsets.bottom;
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
+    final width = math.min(media.size.width * 0.92, 560.0);
+    final height = math.min(media.size.height * 2 / 3, media.size.height - media.viewInsets.vertical - 24);
+    return Dialog(
+      insetPadding: EdgeInsets.zero,
+      backgroundColor: Colors.transparent,
+      child: SafeArea(
         child: SizedBox(
-          height: height * 0.92,
+          width: width,
+          height: height,
           child: GlassCard(
-            margin: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+            margin: EdgeInsets.zero,
             padding: EdgeInsets.zero,
             radius: glassRadiusModal,
             blur: true,
@@ -72,6 +69,164 @@ class _PairingSheet extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class PairingRecipientSelection {
+  static Set<String> toggleAll(Set<String> selected, Iterable<String> fingerprints) {
+    final all = fingerprints.toSet();
+    if (all.isNotEmpty && selected.containsAll(all)) return {};
+    return all;
+  }
+
+  static Set<String> togglePeer(Set<String> selected, String fingerprint, bool checked) {
+    final next = {...selected};
+    if (checked) {
+      next.add(fingerprint);
+    } else {
+      next.remove(fingerprint);
+    }
+    return next;
+  }
+}
+
+class PairingTargetSelectionList extends StatelessWidget {
+  final List<PairingDeviceInfo> peers;
+  final Set<String> selectedFingerprints;
+  final ValueChanged<bool> onToggleAll;
+  final void Function(String fingerprint, bool checked) onTogglePeer;
+
+  const PairingTargetSelectionList({
+    required this.peers,
+    required this.selectedFingerprints,
+    required this.onToggleAll,
+    required this.onTogglePeer,
+    super.key,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fingerprints = peers.map((peer) => peer.fingerprint).toSet();
+    final allSelected = fingerprints.isNotEmpty && selectedFingerprints.containsAll(fingerprints);
+    return Column(
+      children: [
+        CheckboxListTile(
+          title: const Text('All devices'),
+          value: allSelected,
+          onChanged: fingerprints.isEmpty ? null : (checked) => onToggleAll(checked == true),
+        ),
+        for (final peer in peers)
+          CheckboxListTile(
+            secondary: const CircleAvatar(child: Icon(Icons.devices)),
+            title: Text(peer.alias, maxLines: 1, overflow: TextOverflow.ellipsis),
+            subtitle: const Text('Connected'),
+            value: selectedFingerprints.contains(peer.fingerprint),
+            onChanged: (checked) => onTogglePeer(peer.fingerprint, checked == true),
+          ),
+      ],
+    );
+  }
+}
+
+List<PairingDeviceInfo> pairingTargetsForSelection(List<PairingDeviceInfo> peers, Set<String> selectedFingerprints) {
+  if (peers.length == 1) return peers;
+  return peers.where((peer) => selectedFingerprints.contains(peer.fingerprint)).toList();
+}
+
+Future<Set<String>?> showPairingTargetPicker(
+  BuildContext context, {
+  required List<PairingDeviceInfo> peers,
+  required String? sessionToken,
+  required Set<String> initialSelection,
+}) {
+  return showDialog<Set<String>>(
+    context: context,
+    builder: (_) => _PairingSheet(
+      child: _PairingTargetPicker(
+        peers: peers,
+        sessionToken: sessionToken,
+        initialSelection: initialSelection,
+      ),
+    ),
+  );
+}
+
+class _PairingTargetPicker extends StatefulWidget {
+  final List<PairingDeviceInfo> peers;
+  final String? sessionToken;
+  final Set<String> initialSelection;
+
+  const _PairingTargetPicker({
+    required this.peers,
+    required this.sessionToken,
+    required this.initialSelection,
+  });
+
+  @override
+  State<_PairingTargetPicker> createState() => _PairingTargetPickerState();
+}
+
+class _PairingTargetPickerState extends State<_PairingTargetPicker> with Refena {
+  late Set<String> _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    final all = widget.peers.map((peer) => peer.fingerprint).toSet();
+    final remembered = widget.initialSelection.intersection(all);
+    _selected = remembered.isEmpty ? all : remembered;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final connection = ref.watch(pairingConnectionProvider);
+    final peers = connection.sessionToken == widget.sessionToken ? connection.peers : const <PairingDeviceInfo>[];
+    final fingerprints = peers.map((peer) => peer.fingerprint).toSet();
+    final selected = _selected.intersection(fingerprints);
+    final allSelected = fingerprints.isNotEmpty && selected.containsAll(fingerprints);
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 12, 8),
+          child: Row(
+            children: [
+              Expanded(child: Text('Send to devices', style: Theme.of(context).textTheme.titleLarge)),
+              IconButton(
+                tooltip: PairingStrings.close,
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ListView(
+            children: [
+              PairingTargetSelectionList(
+                peers: peers,
+                selectedFingerprints: selected,
+                onToggleAll: (_) => setState(() => _selected = PairingRecipientSelection.toggleAll(selected, fingerprints)),
+                onTogglePeer: (fingerprint, checked) => setState(() {
+                  _selected = PairingRecipientSelection.togglePeer(selected, fingerprint, checked);
+                }),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: selected.isEmpty ? null : () => Navigator.of(context).pop(selected),
+              child: Text(
+                allSelected ? 'Send to all' : 'Send to ${selected.length} ${selected.length == 1 ? 'device' : 'devices'}',
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -93,7 +248,7 @@ class _SendPairingCardState extends State<_SendPairingCard> with Refena {
   bool _busy = false;
   bool _autoClosed = false;
   String _pin = '';
-  int _secondsLeft = 300;
+  int _secondsLeft = PairingController.sessionLifetime.inSeconds;
   Timer? _stateTimer;
   bool _initialized = false;
 
@@ -103,11 +258,12 @@ class _SendPairingCardState extends State<_SendPairingCard> with Refena {
     if (_initialized) return;
     _initialized = true;
     final current = ref.read(pairingControllerProvider);
+    final preferences = ref.read(persistenceProvider);
     _mode = current.sessionToken != null && current.mode == PairingMode.sameNetwork ? PairingMode.sameNetwork : PairingMode.qr;
-    _multiRecipient = current.sessionToken != null ? current.multiRecipient : false;
-    _pinEnabled = current.sessionToken != null && current.pinRequired && _mode == PairingMode.sameNetwork;
+    _multiRecipient = current.sessionToken != null ? current.multiRecipient : preferences.isPairingMultiRecipient();
+    _pinEnabled = current.sessionToken != null ? current.pinRequired : preferences.isPairingPinProtectionEnabled();
     _pin = current.pin ?? ref.notifier(pairingControllerProvider).suggestPin();
-    _encrypted = current.sessionToken != null ? current.encrypted : ref.read(serverProvider)?.https ?? ref.read(settingsProvider).https;
+    _encrypted = current.sessionToken != null ? current.encrypted : preferences.isPairingEncrypted();
     _stateTimer = Timer.periodic(const Duration(seconds: 1), _onTick);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) unawaited(_ensureSession(_mode));
@@ -125,12 +281,12 @@ class _SendPairingCardState extends State<_SendPairingCard> with Refena {
     final state = ref.read(pairingControllerProvider);
     final expiry = state.expiresAt;
     if (expiry != null) {
-      final remaining = expiry.difference(DateTime.now()).inSeconds.clamp(0, 300);
+      final remaining = expiry.difference(DateTime.now()).inSeconds.clamp(0, PairingController.sessionLifetime.inSeconds);
       if (remaining != _secondsLeft) setState(() => _secondsLeft = remaining);
     }
-    if (!_autoClosed && !state.multiRecipient && state.phase == PairingPhase.closedForSelection && state.peers.isNotEmpty) {
+    if (!_autoClosed && ref.read(pairingConnectionProvider).isConnected) {
       _autoClosed = true;
-      Navigator.of(context).pop<List<PairingDeviceInfo>>(state.peers);
+      Navigator.of(context).pop();
     }
   }
 
@@ -154,7 +310,11 @@ class _SendPairingCardState extends State<_SendPairingCard> with Refena {
       );
       if (mounted) {
         final expiry = ref.read(pairingControllerProvider).expiresAt;
-        setState(() => _secondsLeft = expiry?.difference(DateTime.now()).inSeconds.clamp(0, 300) ?? 300);
+        setState(
+          () => _secondsLeft =
+              expiry?.difference(DateTime.now()).inSeconds.clamp(0, PairingController.sessionLifetime.inSeconds) ??
+              PairingController.sessionLifetime.inSeconds,
+        );
       }
     } catch (error) {
       if (!mounted) return;
@@ -179,6 +339,9 @@ class _SendPairingCardState extends State<_SendPairingCard> with Refena {
       if (multiRecipient != null) _multiRecipient = multiRecipient;
       if (encrypted != null) _encrypted = encrypted;
     });
+    final persistence = ref.read(persistenceProvider);
+    if (multiRecipient != null) await persistence.setPairingMultiRecipient(multiRecipient);
+    if (encrypted != null) await persistence.setPairingEncrypted(encrypted);
     await _ensureSession(_mode, restart: true);
   }
 
@@ -186,6 +349,7 @@ class _SendPairingCardState extends State<_SendPairingCard> with Refena {
     if (_busy) return;
     if (!enabled) {
       setState(() => _pinEnabled = false);
+      await ref.read(persistenceProvider).setPairingPinProtectionEnabled(false);
       await _ensureSession(_mode, restart: true);
       return;
     }
@@ -231,16 +395,19 @@ class _SendPairingCardState extends State<_SendPairingCard> with Refena {
       _pin = pin;
       _pinEnabled = true;
     });
-    await _ensureSession(PairingMode.sameNetwork);
+    await ref.read(persistenceProvider).setPairingPinProtectionEnabled(true);
+    await _ensureSession(PairingMode.sameNetwork, restart: true);
   }
 
   Future<void> _closeCard() async {
     final state = ref.read(pairingControllerProvider);
-    if (state.multiRecipient && state.sessionToken != null) {
-      Navigator.of(context).pop();
-      return;
-    }
-    if (state.sessionToken != null) await ref.notifier(pairingControllerProvider).stop();
+    final connected = ref.read(pairingConnectionProvider).isConnected;
+    if (!connected && state.sessionToken != null && !state.multiRecipient) await ref.notifier(pairingControllerProvider).stop();
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  Future<void> _stop() async {
+    await ref.notifier(pairingControllerProvider).stop();
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -268,7 +435,8 @@ class _SendPairingCardState extends State<_SendPairingCard> with Refena {
     final device = ref.watch(deviceFullInfoProvider);
     final avatarIndex = ref.read(persistenceProvider).getProfileAvatar() % 6;
     final colors = Theme.of(context).colorScheme;
-    final qrSize = (MediaQuery.sizeOf(context).width - 64).clamp(180.0, 300.0);
+    final media = MediaQuery.sizeOf(context);
+    final qrSize = math.min(300.0, math.min(media.width - 64, media.height * 0.42)).clamp(120.0, 300.0).toDouble();
 
     return Column(
       children: [
@@ -284,6 +452,11 @@ class _SendPairingCardState extends State<_SendPairingCard> with Refena {
             onSelectionChanged: _busy ? null : (modes) => _selectMode(modes.first),
           ),
         ),
+        if (state.sessionToken != null && !ref.watch(pairingConnectionProvider).isConnected)
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(onPressed: _stop, icon: const Icon(Icons.stop_circle_outlined), label: const Text(PairingStrings.stop)),
+          ),
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
@@ -402,6 +575,7 @@ class _ReceivePairingCardState extends State<_ReceivePairingCard> with Refena {
   final TextEditingController _pinController = TextEditingController();
   int _scannerKey = 0;
   bool _handledCode = false;
+  bool _autoClosed = false;
   bool _initialized = false;
 
   @override
@@ -441,6 +615,7 @@ class _ReceivePairingCardState extends State<_ReceivePairingCard> with Refena {
       if (ref.read(serverProvider) != null) {
         await ref.notifier(serverProvider).restartServerFromSettings();
       }
+      await ref.read(persistenceProvider).setPairingEncrypted(enabled);
     } catch (error) {
       if (!mounted) return;
       setState(() => _encrypted = previous);
@@ -509,15 +684,30 @@ class _ReceivePairingCardState extends State<_ReceivePairingCard> with Refena {
 
   Future<void> _close() async {
     final state = ref.read(pairingControllerProvider);
-    if (state.role == PairingRole.sender && state.sessionToken != null && !state.multiRecipient) {
+    final connected = ref.read(pairingConnectionProvider).isConnected;
+    if (!connected &&
+        ((state.role == PairingRole.sender && state.sessionToken != null && !state.multiRecipient) ||
+            (state.role == PairingRole.receiver && state.phase != PairingPhase.idle))) {
       await ref.notifier(pairingControllerProvider).stop();
     }
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  Future<void> _stop() async {
+    await ref.notifier(pairingControllerProvider).stop();
     if (mounted) Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(pairingControllerProvider);
+    if (state.phase == PairingPhase.joined && !_autoClosed) {
+      _autoClosed = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && ref.read(pairingConnectionProvider).isConnected) Navigator.of(context).pop();
+      });
+    }
+    final connected = ref.watch(pairingConnectionProvider).isConnected;
     return Column(
       children: [
         _CardHeader(title: PairingStrings.receive, onClose: _close),
@@ -532,6 +722,13 @@ class _ReceivePairingCardState extends State<_ReceivePairingCard> with Refena {
             onSelectionChanged: (modes) => _switchMode(modes.first),
           ),
         ),
+        if (!connected &&
+            ((state.role == PairingRole.receiver && state.phase != PairingPhase.idle) ||
+                (state.role == PairingRole.sender && state.sessionToken != null)))
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(onPressed: _stop, icon: const Icon(Icons.stop_circle_outlined), label: const Text(PairingStrings.stop)),
+          ),
         CheckboxListTile(
           dense: true,
           contentPadding: const EdgeInsets.symmetric(horizontal: 16),
